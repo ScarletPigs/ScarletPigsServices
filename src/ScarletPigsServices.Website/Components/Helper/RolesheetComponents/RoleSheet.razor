@@ -1,0 +1,61 @@
+﻿@using ScarletPigsServices.Website.Data.Models.RoleAssignments
+@namespace ScarletPigsServices.Website.Components.Helper.RolesheetComponents
+<div>
+    <div style="display:flex;flex-direction:row;background-color:black;padding:10px;">
+        <div style="width: 150px;display:flex;justify-content:center;align-items:center;">
+            @* OP IMAGE *@
+            <img src="https://placehold.co/100x70" style="width:100px;height:70px;" />
+        </div>
+        <div style="flex-grow:1;">
+            <h1 style="color:white;margin:0px;">@Title</h1>
+            <p style="color:white;margin:0px;font-weight:300;">@Description</p>
+        </div>
+        <div style="display:flex;flex-direction: column-reverse;">
+            @* OP Author *@
+            <p style="color:white;margin:0px;font-weight:300;">by <span style="font-weight:700;">@(string.Concat(Author.Take(15)) + (Author.Length > 15 ? "..." : ""))</span></p>
+        </div>
+    </div>
+    <div style="background-color:@BgColor;padding:15px;position:relative;">
+        @foreach (Squad squad in SquadList)
+        {
+            <SquadDisplay Squad="squad" TextColor="@TextColor" />
+        }
+    </div>
+    <div style="display:flex;flex-direction:row;background-color:black;">
+        <div style="flex-grow:1;padding-top:10px;padding-bottom:10px;padding-left:10px;">
+            <p style="color:white;margin:0px;font-style:italic;">All assignments are subject to change depending on the actual presence of players.</p>
+            <p style="color:white;margin:0px;font-style:italic;">Be considerate and if you have a job you don't exactly love, try to soldier on.</p>
+            <p style="color:white;margin:0px;font-style:italic;">In case of major issues, let the Mission Maker know.</p>
+        </div>
+        <div style="width:50px;background-color:@TextColor;">
+        </div>
+    </div>
+</div>
+
+@code {
+
+    [Parameter]
+    public List<Squad> SquadList { get; set; }
+
+    [Parameter]
+    public EventCallback<List<Squad>> SquadListChanged { get; set; }
+
+    [Parameter]
+    public string Title { get; set; } = "OP Title";
+
+    [Parameter]
+    public string Description { get; set; } = "OP Description";
+
+    [Parameter]
+    public string Author { get; set; } = "OP Author";
+
+    [Parameter]
+    public string JoinOrderComments { get; set; } = "";
+
+    [Parameter]
+    public string BgColor { get; set; } = "#a7a9ac";
+
+    [Parameter]
+    public string TextColor { get; set; } = "#f8b133";
+
+}

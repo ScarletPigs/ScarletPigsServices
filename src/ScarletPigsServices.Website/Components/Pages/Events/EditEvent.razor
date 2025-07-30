@@ -1,0 +1,43 @@
+﻿@page "/events/edit/{id}"
+
+@if (CurrentEvent == null)
+{
+    <MudAlert Severity="Severity.Error">Event not found</MudAlert>
+}
+else
+{
+    <MudContainer>
+        <MudText Typo="Typo.h3" GutterBottom="true">Edit event</MudText>
+
+        <EditForm Model="@EditEventDTO" OnValidSubmit="@UpdateEvent">
+            <DataAnnotationsValidator />
+            <MudContainer>
+                <MudTextField Label="Name" @bind-Value="EditEventDTO.Name" />
+                <MudTextField Label="Description" @bind-Value="EditEventDTO.Description" />
+                <MudTextField Label="Author" @bind-Value="EditEventDTO.Author" />
+                <br />
+                @if (success != 2)
+                {
+                    <MudText Color="Color.Error">
+                        <ValidationSummary />
+                    </MudText>
+                    <br />
+                }
+                else if (success == 1)
+                {
+                    <MudText Color="Color.Success">
+                        Edits done!
+                    </MudText>
+                }
+                <MudContainer Class="flex-row">
+                    <MudButton Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" ButtonType="ButtonType.Submit">Save</MudButton>
+                    <MudButton Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="@DeleteEvent" >Delete</MudButton>
+                    <MudButton Color="Color.Secondary" StartIcon="@Icons.Material.Filled.KeyboardReturn" OnClick="@Cancel">Back</MudButton>
+                </MudContainer>
+            </MudContainer>
+        </EditForm>
+
+
+    </MudContainer>
+}
+

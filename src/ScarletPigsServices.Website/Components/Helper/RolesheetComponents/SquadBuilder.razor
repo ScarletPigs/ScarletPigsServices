@@ -1,0 +1,72 @@
+﻿@using ScarletPigsServices.Website.Data.Models.RoleAssignments
+
+<MudExpansionPanels>
+    <MudExpansionPanel Text="@Squad.Callsign">
+
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="() => {ParentSquadList.Remove(Squad); HandleChange?.Invoke();}">Remove</MudButton>
+
+        <MudForm Model="Squad">
+            <MudTextField Label="Callsign" @bind-Value="Squad.Callsign" />
+            <MudTextField Label="Descriptive Name" @bind-Value="Squad.DescriptiveName" />
+            <MudStack Justify="Justify.Center" Row>
+                <MudPaper>
+                    <MudTextField Label="SR Channel 1" @bind-Value="Squad.SRRadioChannels[0]" />
+                    <MudTextField Label="SR Channel 2" @bind-Value="Squad.SRRadioChannels[1]" />
+                    <MudTextField Label="SR Channel 3" @bind-Value="Squad.SRRadioChannels[2]" />
+                </MudPaper>
+                <MudPaper>
+                    <MudTextField Label="LR Channel 1" @bind-Value="Squad.LRRadioChannels[0]" />
+                    <MudTextField Label="LR Channel 2" @bind-Value="Squad.LRRadioChannels[1]" />
+                    <MudTextField Label="LR Channel 3" @bind-Value="Squad.LRRadioChannels[2]" />
+                </MudPaper>
+            </MudStack>
+        </MudForm>
+
+        <MudText>Roles</MudText>
+
+        <MudDataGrid Items="Squad.Roles" EditMode="DataGridEditMode.Cell" SortMode="SortMode.None" ReadOnly="false">
+            <Columns>
+                <PropertyColumn Property="@(x => x.Name)" Title="Role Name" />
+                <PropertyColumn Property="@(x => x.AssignedPlayer)" Title="Assigned Player" />
+                <TemplateColumn>
+                    <CellTemplate>
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="() => Squad.Roles.Remove((Role)context.Item)">Remove</MudButton>
+                    </CellTemplate>
+                </TemplateColumn>
+            </Columns>
+        </MudDataGrid>
+
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="() => Squad.Roles.Add(new Role())">Add Role</MudButton>
+
+
+        <MudText>Squads in @Squad.Callsign</MudText>
+
+        @foreach (Squad squad in Squad.Squads)
+        {
+            <SquadBuilder ParentSquadList="Squad.Squads" Squad="squad" />
+        }
+
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="() => Squad.Squads.Add(new Squad())">Add Squad</MudButton>
+
+    </MudExpansionPanel>
+</MudExpansionPanels>
+
+
+
+@code {
+    [CascadingParameter]
+    public Action HandleChange { get; set; }
+
+    [Parameter]
+    public List<Squad> ParentSquadList { get; set; }
+
+    [Parameter]
+    public EventCallback<List<Squad>> ParentSquadListChanged { get; set; }
+
+    [Parameter]
+    public Squad Squad { get; set; }
+
+    [Parameter]
+    public EventCallback<Squad> SquadChanged { get; set; }
+
+}

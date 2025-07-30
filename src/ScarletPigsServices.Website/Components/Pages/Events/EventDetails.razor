@@ -1,0 +1,37 @@
+﻿@page "/events/{id}"
+
+
+@if (Event == null)
+{
+    <MudAlert Severity="Severity.Error">Event not found</MudAlert>
+}
+else
+{
+    <MudContainer>
+        <MudText Typo="Typo.h3" GutterBottom="true">@Event.Name</MudText>
+        <MudText Typo="Typo.subtitle1" GutterBottom="true">@Event.Author</MudText>
+        <MudText Typo="Typo.body1" GutterBottom="true">@Event.Description</MudText>
+
+        @if (Event.StartTime.Date == Event.EndTime.Date)
+        {
+            <MudText Typo="Typo.body2" GutterBottom="true">Date: @Event.StartTime.ToShortDateString()</MudText>
+            <MudText Typo="Typo.body2" GutterBottom="true">From: @Event.StartTime.ToShortTimeString()</MudText>
+            <MudText Typo="Typo.body2" GutterBottom="true">To: @Event.EndTime.ToShortTimeString()</MudText>
+        }
+        else
+        {
+            <MudText Typo="Typo.body2" GutterBottom="true">From: @Event.StartTime.ToShortTimeString() - @Event.StartTime.ToShortDateString()</MudText>
+            <MudText Typo="Typo.body2" GutterBottom="true">To: @Event.EndTime.ToShortTimeString() - @Event.StartTime.ToShortDateString()</MudText>
+        }
+        
+        @if (User.Id == Event.CreatorDiscordUsername)
+        {
+            <MudContainer Class="flex-row">
+                <MudButton Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit" OnClick="@EditEvent" >Edit</MudButton>
+                <MudButton Color="Color.Error" StartIcon="@Icons.Material.Filled.Close" OnClick="@DeleteEvent" >Delete</MudButton>
+            </MudContainer>
+        }
+
+    </MudContainer>
+}
+

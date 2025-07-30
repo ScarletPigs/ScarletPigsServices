@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generator: Adobe Illustrator 27.6.0, SVG Export Plug-In . SVG Version: 6.00 Build 0)  -->
+<svg version="1.1" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
+	 viewBox="0 0 300 170" style="enable-background:new 0 0 300 170;" xml:space="preserve">
+<style type="text/css">
+	.st0{fill:#FFFFFF;}
+	.st1{fill:#084F95;}
+	.st2{fill:none;stroke:#084F95;stroke-width:9;stroke-miterlimit:10;}
+	.st3{fill:none;stroke:#084F95;stroke-width:11;stroke-miterlimit:10;}
+</style>
+<g>
+	<rect x="4.5" y="4.5" class="st0" width="291" height="161"/>
+	<path class="st1" d="M291,9v152H9V9H291 M300,0H0v170h300V0L300,0z"/>
+</g>
+<g>
+	<g>
+		<path class="st1" d="M150,106.38c7.51,0,13.62,6.11,13.62,13.62s-6.11,13.62-13.62,13.62c-7.51,0-13.62-6.11-13.62-13.62
+			S142.49,106.38,150,106.38 M150,97.38c-12.49,0-22.62,10.13-22.62,22.62s10.13,22.62,22.62,22.62s22.62-10.13,22.62-22.62
+			S162.49,97.38,150,97.38L150,97.38z"/>
+	</g>
+	<g>
+		<line class="st2" x1="150" y1="102.02" x2="150" y2="33.89"/>
+	</g>
+	<g>
+		<polyline class="st2" points="170.42,51.81 150,31.38 129.58,51.81 		"/>
+	</g>
+</g>
+</svg>

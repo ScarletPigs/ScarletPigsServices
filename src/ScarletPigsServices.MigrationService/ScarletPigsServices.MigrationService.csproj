@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>dotnet-ScarletPigsServices.MigrationService-f54702e4-a16d-4e32-af98-f16c81c892a5</UserSecretsId>
+    <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.4.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.7" />
+    <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.22.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Aspire\ScarletPigsServices.ServiceDefaults\ScarletPigsServices.ServiceDefaults.csproj" />
+    <ProjectReference Include="..\..\Aspire\ScarletPigsServices.ServiceReferences\ScarletPigsServices.ServiceReferences.csproj" />
+    <ProjectReference Include="..\ScarletPigsServices.Data\ScarletPigsServices.Data.csproj" />
+  </ItemGroup>
+</Project>

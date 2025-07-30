@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/Aspire/">
+    <Project Path="Aspire/ScarletPigsServices.ServiceReferences/ScarletPigsServices.ServiceReferences.csproj" Id="2584f692-515b-48ac-8152-f702b926e4bd" />
+    <Project Path="Aspire/ScarletPigsServices.AppHost/ScarletPigsServices.AppHost.csproj" />
+    <Project Path="Aspire/ScarletPigsServices.ServiceDefaults/ScarletPigsServices.ServiceDefaults.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/ScarletPigsServices.MigrationService/ScarletPigsServices.MigrationService.csproj" />
+    <Project Path="src/ScarletPigsServices.Api/ScarletPigsServices.Api.csproj" />
+    <Project Path="src/ScarletPigsServices.Data/ScarletPigsServices.Data.csproj" />
+    <Project Path="src/ScarletPigsServices.Website/ScarletPigsServices.Website.csproj" />
+  </Folder>
+</Solution>

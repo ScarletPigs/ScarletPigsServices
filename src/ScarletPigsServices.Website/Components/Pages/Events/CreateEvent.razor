@@ -1,0 +1,51 @@
+﻿@page "/events/create"
+
+
+<MudContainer>
+    <MudText Typo="Typo.h3" GutterBottom="true">Edit event</MudText>
+
+    <EditForm Model="@CreateEventDTO" OnValidSubmit="@OnCreateEvent">
+        <DataAnnotationsValidator />
+        <MudContainer>
+            <MudTextField Label="OP Name" @bind-Value="CreateEventDTO.Name" />
+            <MudTextField Label="OP Description" @bind-Value="CreateEventDTO.Description" />
+            <MudTextField Label="OP Author" @bind-Value="CreateEventDTO.Author" />
+
+            <MudGrid Spacing="6" Justify="Justify.SpaceBetween">
+                <MudItem xs="6">
+                    <MudDatePicker Label="OP Start date" Date="@CreateEventDTO.StartTime" DateChanged="@(e => {CreateEventDTO.StartTime = e.Value.Add(CreateEventDTO.StartTime.TimeOfDay);})" />
+                </MudItem>
+                <MudItem xs="6">
+                    <MudTimePicker Label="OP Start time" Time="@CreateEventDTO.StartTime.TimeOfDay" TimeChanged="@(e => {CreateEventDTO.StartTime = CreateEventDTO.StartTime.Date.Add(e.Value);})" />
+                </MudItem>
+            </MudGrid>
+
+            <MudGrid Spacing="6" Justify="Justify.SpaceBetween">
+                <MudItem xs="6">
+                    <MudDatePicker Label="OP End date" Date="@CreateEventDTO.EndTime" DateChanged="@(e => {CreateEventDTO.EndTime = e.Value.Add(CreateEventDTO.EndTime.TimeOfDay);})" />
+                </MudItem>
+                <MudItem xs="6">
+                    <MudTimePicker Label="OP End time" Time="@CreateEventDTO.EndTime.TimeOfDay" TimeChanged="@(e => {CreateEventDTO.EndTime = CreateEventDTO.EndTime.Date.Add(e.Value);})" />
+                </MudItem>
+            </MudGrid>
+            <br />
+            @if (success != 2)
+            {
+                <MudText Color="Color.Error">
+                    <ValidationSummary />
+                </MudText>
+                <br />
+            }
+            else if (success == 1)
+            {
+                <MudText Color="Color.Success">
+                    Edits done!
+                </MudText>
+            }
+            <MudContainer Class="flex-row">
+                <MudButton Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" ButtonType="ButtonType.Submit">Save</MudButton>
+                <MudButton Color="Color.Secondary" StartIcon="@Icons.Material.Filled.KeyboardReturn" OnClick="@Cancel">Back</MudButton>
+            </MudContainer>
+        </MudContainer>
+    </EditForm>
+</MudContainer>

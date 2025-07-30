@@ -1,0 +1,44 @@
+﻿@page "/build-a-role-sheet"
+@using ScarletPigsServices.Website.Data.Models.RoleAssignments
+@using ScarletPigsServices.Website.Components.Helper.RolesheetComponents
+@namespace ScarletPigsServices.Website.Components.Pages
+
+<PageTitle>Build-A-Role-Sheet Tool</PageTitle>
+
+<CascadingValue Value="HandleChange">
+
+    <MudGrid Justify="Justify.SpaceAround">
+        <MudItem>
+            <MudPaper>
+                <MudText Typo="Typo.h3">Build-A-Role-Sheet Tool</MudText>
+
+                <MudButton Color="Color.Primary" OnClick="@(e => StateHasChanged())">Rerender</MudButton>
+
+                <MudForm>
+                    @* Need to add image upload ability *@
+                    <MudTextField Label="Title" @bind-Value="@OPTitle" />
+                    <MudTextField Label="Description" @bind-Value="@OPDescription" />
+                    <MudTextField Label="Author" @bind-Value="@OPAuthor" />
+                    <MudTextField Label="Join Order Comments" @bind-Value="@OPJoinOrderComment" />
+                    <MudColorPicker Label="Background Color" @bind-Value="@BgColor" />
+                    <MudColorPicker Label="Text Color" @bind-Value="@TextColor" />
+
+                </MudForm>
+
+                    @foreach (Squad squad in Squads)
+                    {
+                        <SquadBuilder ParentSquadList="Squads" Squad="squad" />
+                    }
+
+                    <MudButton Color="Color.Success" OnClick="@(e => Squads.Add(new Squad()))">Add Squad</MudButton>
+            
+            </MudPaper>
+        </MudItem>
+        <MudItem>
+            <MudPaper>
+                <RoleSheet @bind-SquadList="Squads" Title="@OPTitle" Description="@OPDescription" Author="@OPAuthor" JoinOrderComments="@OPJoinOrderComment" BgColor="@BgColor.Value" TextColor="@TextColor.Value" />
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+</CascadingValue>

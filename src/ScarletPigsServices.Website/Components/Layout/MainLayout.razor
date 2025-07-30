@@ -1,0 +1,99 @@
+﻿@using ScarletPigsServices.Website.Data.Models.Auth
+@inherits LayoutComponentBase
+@inject NavigationManager NavigationManager
+
+<MudThemeProvider @ref="_mudThemeProvider" IsDarkMode="true" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <MudAppBar ToolBarClass="d-flex justify-content-between" Elevation="1" Class="d-flex justify-content-center">
+
+        <MudElement Class="d-inline-flex justify-content-around w-100">
+            <MudButton Href="/" Style="width:105px;">Home</MudButton>
+
+        </MudElement>
+
+        <a href="/" class="logo-link d-inline-flex">
+            <img alt="Site logo" src="imgs/LogoScarletPigs.svg" class="logo-img position-relative" style="top:20px;width:150px;filter:drop-shadow(3px 3px 2px rgba(0, 0, 0, .7)) url()" />
+        </a>
+
+
+        <MudElement Class="d-inline-flex justify-content-around w-100">
+            <MudMenu Label="Tools" ActivationEvent="@MouseEvent.MouseOver" AnchorOrigin="Origin.BottomCenter" TransformOrigin="Origin.TopCenter" Style="width:105px;" Class="rounded-0">
+                <ActivatorContent>
+                    <MudButton Style="width:105px;">Tools</MudButton>
+                </ActivatorContent>
+                <ChildContent>
+                    <MudMenuItem Icon="@Icons.Material.Filled.List" Href="build-a-role-sheet">Build-A-Role-Sheet</MudMenuItem>
+                    <MudMenuItem Icon="@Icons.Material.Filled.Terminal" Href="command-line-generator">Commandline Generator</MudMenuItem>
+                </ChildContent>
+            </MudMenu>
+
+            <AuthorizeView Policy="IsAuthenticated">
+                <Authorized>
+                    <MudMenu Label="Tools" ActivationEvent="@MouseEvent.MouseOver" AnchorOrigin="Origin.BottomCenter" TransformOrigin="Origin.TopCenter" Style="width:105px;" Class="rounded-0">
+                        <ActivatorContent>
+                            <MudButton Style="width:105px;"><MudAvatar><MudImage Alt="User avatar" Src="@(((KeycloakUser)context.User).AvatarUrl)" /></MudAvatar></MudButton>
+                        </ActivatorContent>
+                        <ChildContent>
+                            <MudMenuItem Icon="@Icons.Material.Filled.Logout" Href="signout">Logout</MudMenuItem>
+                        </ChildContent>
+                    </MudMenu>
+                </Authorized>
+                <NotAuthorized>
+                    <MudButton Href="signin">Login (Discord)</MudButton>
+                </NotAuthorized>
+            </AuthorizeView>
+        </MudElement>
+
+    </MudAppBar>
+    <MudDrawer Open="false" ClipMode="DrawerClipMode.Always" Elevation="2">
+        <NavMenu />
+    </MudDrawer>
+    <MudMainContent>
+        @Body
+    </MudMainContent>
+</MudLayout>
+
+@code {
+    private bool _isDarkMode = false;
+    private bool _drawerOpen = true;
+    private MudThemeProvider _mudThemeProvider { get; set; } = default!;
+
+    // For use to customize the theme for the future
+    private MudTheme MudTheme = new MudTheme()
+    {
+        PaletteLight = new PaletteLight()
+        {
+            
+        },
+        PaletteDark = new PaletteDark()
+        {
+            
+        }
+    };
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _isDarkMode = await _mudThemeProvider.GetSystemPreference();
+            await _mudThemeProvider.WatchSystemPreference(OnSystemPreferenceChanged);
+            StateHasChanged();
+        }
+    }
+
+    private Task OnSystemPreferenceChanged(bool newValue)
+    {
+        _isDarkMode = newValue;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+    
+    private void DrawerToggle()
+    {
+        _drawerOpen = !_drawerOpen;
+    }
+}

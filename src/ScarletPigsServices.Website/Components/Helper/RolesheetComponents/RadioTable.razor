@@ -1,0 +1,69 @@
+﻿@using ScarletPigsServices.Website.Data.Models.RoleAssignments
+@namespace ScarletPigsServices.Website.Components.Helper.RolesheetComponents
+
+@if (SR && Squad != null)
+{
+    <table>
+        <tbody>
+            @for (int i = 0; i < Squad.SRRadioChannels.Length; i++)
+            {
+                string channel = Squad.SRRadioChannels[i];
+                <tr>
+                    <td style="padding-right:10px;">
+                        @if (i == 0)
+                        {   
+                            <img src="imgs/arma/radio/sr.svg" width=30 />
+                        }
+                    </td>
+                    <td>
+                        <p style="color: @TextColor;font-size:1.4em;text-shadow:3px 3px 5px black">@channel</p>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@if (LR && Squad != null)
+{
+    <table>
+        <tbody>
+            @for (int i = 0; i < Squad.LRRadioChannels.Length; i++)
+            {
+                string channel = Squad.LRRadioChannels[i];
+                <tr>
+                    <td style="padding-right:10px;">
+                        @if (i == 0)
+                        {   
+                            <img src="imgs/arma/radio/lr.svg" width=30 />
+                        }
+                    </td>
+                    <td>
+                        <p style="color: @TextColor;font-size:1.4em;text-shadow:3px 3px 5px black">@channel</p>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    [Parameter]
+    public Squad? Squad { get; set; }
+
+    [Parameter]
+    public EventCallback<Squad?> SquadChanged { get; set; }
+
+    [Parameter]
+    public string TextColor { get; set; } = "#f8b133";
+
+    [Parameter]
+    public string IconColor { get; set; } = "black";
+
+    [Parameter]
+    public bool SR { get; set; } = false;
+
+    [Parameter]
+    public bool LR { get; set; } = false;
+
+}

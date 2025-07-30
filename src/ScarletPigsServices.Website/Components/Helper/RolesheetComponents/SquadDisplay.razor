@@ -1,0 +1,128 @@
+﻿@using ScarletPigsServices.Website.Components.Helper.RolesheetComponents
+@using ScarletPigsServices.Website.Data.Models.Helpers
+@using ScarletPigsServices.Website.Data.Models.RoleAssignments
+
+
+
+@if (true)
+{
+    <SVGPath @ref="@_SVGContainer" />
+}
+
+<div>
+    <table>
+        <tbody>
+            <tr>
+                <!-- Displays the squad name and roles -->
+                <td>
+                    <div style="display:flex;flex-direction:row;margin:1rem;">
+                        <div style="height:inherit;align-content:center;">
+                            <img id="@Squad.Id" src="imgs/arma/orbaticons/Nato JMS_Infantry.svg" alt="Squad" style="height:3em;margin-right:1em;position:relative;z-index:10;" />
+                        </div>
+                        <p style="color:@TextColor;height:inherit;margin:0px;">
+                            <span style="font-size:3em;text-shadow:3px 3px 5px black">@Squad.Callsign.ToUpper()  </span>
+                            <span style="font-size:1.4em;text-shadow:3px 3px 5px black">@Squad.DescriptiveName</span>
+                        </p>
+                    </div>
+
+
+                    @if (Squad.Roles != null && Squad.Roles.Count > 0)
+                    {
+                    <ul style="padding-left:7rem;">
+                        @foreach (Role role in Squad.Roles)
+                        {
+                            <li>
+                                <p style="margin:0px;">
+                                    <span style="width:2em;height:2em;">
+                                        @if (!string.IsNullOrEmpty(role.Icon))
+                                        {
+                                            <img src="@role.Icon" alt="@role.Name" style="width:2em;height:2em;" />
+                                        } else 
+                                        {
+                                            <p style="width:2em;height:1em;display:inline-block;padding:0px;margin:0px;"></p>
+                                        }
+                                    </span>
+                                    <span>@role.Name.PadRight(20, '.')</span>
+                                    <span>@role.AssignedPlayer.PadRight(20, ' ')</span>
+                                </p>
+                            </li>
+                        }
+                    </ul>
+                    }
+                </td>
+
+                <td style="width:100px;">
+                </td>
+
+                <!-- Displays all short range radio stuff -->
+                <td style="padding-top:7em;">
+                    <RadioTable SR="true" Squad="Squad" TextColor="@TextColor" />
+                </td>
+
+                <td style="width:50px;">
+                </td>
+
+                <!-- Displays all long range radio stuff -->
+                <td style="padding-top:7em;">
+                    <RadioTable LR="true" Squad="Squad" TextColor="@TextColor" />
+                </td>
+
+                <td style="width:100px;">
+                </td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+@if (Squad.Squads != null && Squad.Squads.Count > 0)
+{
+    @foreach (Squad squad in Squad.Squads)
+    {
+        <div style="padding-left:50px;">
+            <SquadDisplay ParentSquad="@Squad" Squad="@squad" TextColor="@TextColor" />
+        </div>
+    }
+}
+
+@code {
+    [Parameter]
+    public Squad? Squad { get; set; }
+
+    [Parameter]
+    public Squad? ParentSquad { get; set; }
+
+    [Parameter]
+    public EventCallback<Squad?> SquadChanged { get; set; }
+
+    [Parameter]
+    public string TextColor { get; set; } = "#f8b133";
+
+
+    [Parameter]
+    public ElementReference ParentSquadDisplayRef { get; set; }
+    [Parameter]
+    public EventCallback<ElementReference> ParentSquadDisplayRefChanged { get; set; }
+
+    public ElementReference SquadDisplayRef { get; set; }
+
+    [Inject]
+    private IJSRuntime JSRuntime { get; set; }
+
+
+
+    private SVGPath? _SVGContainer { get; set; } = null;
+
+    private bool IsParent { get; set; } = false;
+
+
+
+    protected override async Task OnParametersSetAsync()
+    {
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        foreach (Squad subsquad in Squad.Squads)
+            await _SVGContainer?.AddConnection(Squad.Id, subsquad.Id);
+    }
+}

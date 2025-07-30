@@ -1,0 +1,17 @@
+﻿<MudNavMenu>
+    <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Home">Home</MudNavLink>
+    <MudNavLink Href="counter" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Add">Counter</MudNavLink>
+    <MudNavLink Href="weather" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.List">Weather</MudNavLink>
+	<MudNavLink Href="auth" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.List">Auth Required</MudNavLink>
+	<MudNavLink Href="build-a-role-sheet" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.List">Build-A-Role-Sheet</MudNavLink>
+
+	<AuthorizeView Policy="IsAuthenticated">
+		<Authorized>
+			<MudNavLink Href="Account/Manage" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.List">@context.User.Identity?.Name</MudNavLink>
+		</Authorized>
+		<NotAuthorized>
+			<MudNavLink Href="signin" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.List">Login (Discord)</MudNavLink>
+		</NotAuthorized>
+	</AuthorizeView>
+
+</MudNavMenu>

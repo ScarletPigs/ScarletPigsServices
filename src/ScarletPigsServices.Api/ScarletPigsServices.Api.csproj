@@ -24,6 +24,7 @@
 
 
   <ItemGroup>
+    <ProjectReference Include="..\..\Aspire\ScarletPigsServices.ServiceDefaults\ScarletPigsServices.ServiceDefaults.csproj" />
     <ProjectReference Include="..\..\Aspire\ScarletPigsServices.ServiceReferences\ScarletPigsServices.ServiceReferences.csproj" />
     <ProjectReference Include="..\ScarletPigsServices.Data\ScarletPigsServices.Data.csproj" />
   </ItemGroup>

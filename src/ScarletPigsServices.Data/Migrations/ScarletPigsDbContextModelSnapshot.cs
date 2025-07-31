@@ -2,30 +2,27 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
-using Piglet_API.Data;
+using ScarletPigsServices.Data;
 
 #nullable disable
 
-namespace Piglet_API.Migrations
+namespace ScarletPigsServices.Data.Migrations
 {
-    [DbContext(typeof(PigletDBContext))]
-    [Migration("20241030190459_Initial migration")]
-    partial class Initialmigration
+    [DbContext(typeof(ScarletPigsDbContext))]
+    partial class ScarletPigsDbContextModelSnapshot : ModelSnapshot
     {
-        /// <inheritdoc />
-        protected override void BuildTargetModel(ModelBuilder modelBuilder)
+        protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "8.0.10")
+                .HasAnnotation("ProductVersion", "9.0.7")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("Piglet_Domain_Models.Models.Event", b =>
+            modelBuilder.Entity("ScarletPigsServices.Data.Events.Event", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -67,7 +64,7 @@ namespace Piglet_API.Migrations
                     b.ToTable("Events");
                 });
 
-            modelBuilder.Entity("Piglet_Domain_Models.Models.EventType", b =>
+            modelBuilder.Entity("ScarletPigsServices.Data.Events.EventType", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()

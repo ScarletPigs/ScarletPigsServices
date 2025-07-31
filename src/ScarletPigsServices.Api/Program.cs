@@ -1,8 +1,4 @@
-
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Hosting;
 using Microsoft.OpenApi.Models;
-using Piglet_API.Data;
 using ScarletPigsServices.Api.Repositories;
 using ScarletPigsServices.Data;
 using ScarletPigsServices.ServiceReferences;
@@ -35,13 +31,6 @@ namespace ScarletPigsServices.Api
 
             var app = builder.Build();
 
-            // Run database migrations
-            using (var scope = app.Services.CreateScope())
-            {
-                var services = scope.ServiceProvider;
-                var context = services.GetRequiredService<PigletDBContext>();
-                context.Database.Migrate();
-            }
 
             // Configure the HTTP request pipeline.
             if (app.Environment.IsDevelopment())

@@ -1,5 +1,6 @@
 
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
 using Microsoft.OpenApi.Models;
 using Piglet_API.Data;
 using ScarletPigsServices.Api.Repositories;
@@ -15,6 +16,7 @@ namespace ScarletPigsServices.Api
         {
             var builder = WebApplication.CreateBuilder(args);
 
+            builder.AddServiceDefaults();
 
             builder.Services.AddControllers();
 

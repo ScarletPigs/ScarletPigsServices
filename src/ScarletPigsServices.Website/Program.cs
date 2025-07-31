@@ -10,8 +10,12 @@ using System.Security.Claims;
 using ScarletPigsServices.Website.Data.Services.Auth;
 using ScarletPigsServices.Website.Data.Services.HTTP;
 using ScarletPigsServices.Website.Components;
+using Microsoft.Extensions.Hosting;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.AddServiceDefaults();
+
 
 // Add services to the container.
 builder.Services.AddRazorComponents()

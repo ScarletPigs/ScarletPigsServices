@@ -453,6 +453,29 @@ async def deletesunday(interaction: discord.Interaction):
     await interaction.followup.send(content="Which op do you want to delete? ", view=view)
 
 
+# Register the set server connection command
+
+
+@TREE.command(name="setserver", description="Set the server IP and port used for status checks")
+@app_commands.checks.has_role("ServerOps")
+async def setserver(interaction: discord.Interaction, ip: str, port: int):
+    await interaction.response.defer(ephemeral=True)
+    # Basic validation
+    if port < 1 or port > 65535:
+        await interaction.followup.send(content="Port must be between 1 and 65535.", ephemeral=True)
+        return
+    try:
+        schedule.set_server_connection(ip, port)
+        await interaction.followup.send(content=f"Server connection set to {ip}:{port}", ephemeral=True)
+        # Nudge a status refresh soon
+        try:
+            await activity_loop()
+        except Exception:
+            pass
+    except Exception as e:
+        await interaction.followup.send(content=f"Failed to set server connection: {e}", ephemeral=True)
+
+
 # Register the create schedule message command
 
 
@@ -538,7 +561,7 @@ async def createquestionnaire(interaction: discord.Interaction):
                 print("Couldn't delete old message")
                 pass
     dlcs = schedule.get_questionnaire_info()
-    msg_content = f"**The Scarlet Pigs DLC Questionnaire**\n\nPlease react to this message with the DLCs you have to allow the mission makers to better keep track of which DLCs they can make use of.\n\n*DLCs:*\n{format_dlc_list(dlcs)}\n\n\nResults: https://docs.google.com/spreadsheets/d/e/2PACX-1vQYrmXaRK5P-FatQKhgiy6SEmyTX2sqSBvBxKg5Oz-hTYZMgeh8fFqgRD__mdSn5gC-3LqVC3u02WFJ/pubchart?oid=653336303&format=interactive"
+    msg_content = f"**The Scarlet Pigs DLC Questionnaire**\n\nPlease react to this message with the DLCs you have to allow the mission makers to better keep track of which DLCs they can make use of.\n\n*DLCs:*\n{format_dlc_list(dlcs)}\n\n\nResults will be available soon."
     new_msg = await channel.send(content=msg_content, embeds=[])
     await interaction.followup.send(content="DLC questionnaire created.", ephemeral=True)
     await asyncio.sleep(1)
@@ -804,18 +827,12 @@ async def activity_loop():
 
         print("Updating server status...")
 
-        server_ip = os.getenv("SERVER_IP")
-        server_port = os.getenv("SERVER_PORT")
-        if not server_ip or not server_port:
+        server_ip, server_port_int = schedule.get_server_connection()
+        if not server_ip or server_port_int is None:
             await BOT.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"an offline server"))
             print("SERVER_IP or SERVER_PORT not set.")
             return
-        try:
-            port_int = int(server_port) + 1
-        except Exception:
-            await BOT.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"an offline server"))
-            print("SERVER_PORT is not a valid integer.")
-            return
+        port_int = server_port_int + 1
         try:
             with A2SQuery(server_ip, port_int, timeout=7) as a2s:
                 if BOT.server_status == "offline":

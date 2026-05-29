@@ -15,6 +15,7 @@ namespace ScarletPigsServices.Website.Data.Models.Auth
         // Permissions, roles, and such
         public List<string> Roles => FindAll(ClaimTypes.Role).Select(x => x.Value).ToList();
         public bool IsAdmin => IsInRole("UnitOrganizer");
+        public bool IsAllowedMissionUpload => IsAdmin || IsInRole("MissionMaker");
 
 
 

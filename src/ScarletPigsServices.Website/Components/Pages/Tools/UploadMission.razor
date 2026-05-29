@@ -1,0 +1,231 @@
+@page "/upload-mission"
+@namespace ScarletPigsServices.Website.Components.Pages
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.Forms
+@using MudBlazor
+@using ScarletPigsServices.Website.Data.Models.Auth
+@using ScarletPigsServices.Website.Data.Services.FTP
+
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IHavocFtpConnection HavocFtp
+@inject ISnackbar Snackbar
+
+<PageTitle>Upload Mission</PageTitle>
+
+<MudContainer Style="margin-top: 50px; max-width: 900px; margin-left: auto; margin-right: auto;">
+    @if (_isLoading)
+    {
+        <MudProgressCircular Class="mx-auto d-flex" Color="Color.Primary" Indeterminate="true" />
+    }
+    else if (!_isAuthenticated)
+    {
+        <MudAlert Severity="Severity.Warning">Login is required to browse mission targets and upload files.</MudAlert>
+    }
+    else if (!_canUploadMissions)
+    {
+        <MudAlert Severity="Severity.Error">Your account does not have mission upload permission.</MudAlert>
+    }
+    else
+    {
+        <MudGrid Style="width: 100%;">
+            <MudItem xs="12">
+                <MudText Typo="Typo.h4" Align="Align.Center">Upload Mission</MudText>
+            </MudItem>
+
+            <MudItem xs="12" md="8">
+                <MudSelect T="string" Label="FTP target folder" @bind-Value="_selectedFolder" Disabled="@_isBusy">
+                    @foreach (var folder in _folders)
+                    {
+                        <MudSelectItem Value="@folder">@folder</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+
+            <MudItem xs="12" md="4" Class="d-flex align-center">
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="RefreshFoldersAsync" Disabled="@_isBusy">
+                    Refresh folders
+                </MudButton>
+            </MudItem>
+
+            @if (!string.IsNullOrWhiteSpace(_folderLoadError))
+            {
+                <MudItem xs="12">
+                    <MudAlert Severity="Severity.Error">@_folderLoadError</MudAlert>
+                </MudItem>
+            }
+
+            <MudItem xs="12">
+                <MudFileUpload T="IReadOnlyList<IBrowserFile>"
+                               @ref="_fileUpload"
+                               OnFilesChanged="OnInputFileChanged"
+                               AppendMultipleFiles="false"
+                               Accept=".pbo"
+                               Hidden="false"
+                               InputClass="absolute mud-width-full mud-height-full overflow-hidden z-10"
+                               InputStyle="opacity:0"
+                               tabindex="-1"
+                               Disabled="@_isBusy"
+                               @ondrop="@ClearDragClass"
+                               @ondragenter="@SetDragClass"
+                               @ondragleave="@ClearDragClass"
+                               @ondragend="@ClearDragClass">
+                    <ActivatorContent>
+                        <MudPaper Outlined="true"
+                                  Class="@_dragClass"
+                                  Style="display: flex; justify-content: center; align-items: center; min-height: 150px; width: 100%; margin: 0 auto;">
+                            <MudText Typo="Typo.h6" Align="Align.Center">
+                                Drag and drop a mission here or click to select
+                            </MudText>
+                        </MudPaper>
+                    </ActivatorContent>
+                </MudFileUpload>
+            </MudItem>
+
+            <MudItem xs="12">
+                <MudText Typo="Typo.body2">Connected folders: @string.Join(", ", _folders)</MudText>
+            </MudItem>
+        </MudGrid>
+    }
+</MudContainer>
+
+@code {
+    private const string DefaultDragClass = "relative rounded-lg border-2 border-dashed pa-4 mt-4 mud-width-full mud-height-full";
+    private const long MaxMissionUploadBytes = 1024L * 1024L * 1024L;
+
+    private readonly List<string> _folders = ["/"];
+    private string _dragClass = DefaultDragClass;
+    private string _selectedFolder = "/";
+    private string? _folderLoadError;
+    private bool _isAuthenticated;
+    private bool _canUploadMissions;
+    private bool _isLoading = true;
+    private bool _isBusy;
+    private MudFileUpload<IReadOnlyList<IBrowserFile>>? _fileUpload;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        _isAuthenticated = authState.User.Identity?.IsAuthenticated ?? false;
+
+        if (_isAuthenticated)
+        {
+            var keycloakUser = new KeycloakUser(authState.User);
+            _canUploadMissions = keycloakUser.IsAllowedMissionUpload;
+
+            if (_canUploadMissions)
+            {
+                await RefreshFoldersAsync();
+            }
+        }
+
+        _isLoading = false;
+    }
+
+    private async Task RefreshFoldersAsync()
+    {
+        _folderLoadError = null;
+        _isBusy = true;
+
+        try
+        {
+            var folders = await HavocFtp.GetFolderNamesAsync();
+            _folders.Clear();
+            _folders.Add("/");
+            _folders.AddRange(folders);
+
+            if (!_folders.Contains(_selectedFolder, StringComparer.OrdinalIgnoreCase))
+            {
+                _selectedFolder = _folders[0];
+            }
+        }
+        catch (Exception ex)
+        {
+            _folderLoadError = ex.Message;
+            Snackbar.Add($"Failed to load FTP folders: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
+    private async Task OnInputFileChanged(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            if (!ValidateInput(e.GetMultipleFiles(), out var error))
+            {
+                Snackbar.Add(error, Severity.Error);
+                return;
+            }
+
+            _isBusy = true;
+            var file = e.File;
+            await using var stream = file.OpenReadStream(MaxMissionUploadBytes);
+            var remotePath = BuildRemotePath(_selectedFolder, file.Name);
+
+            await HavocFtp.UploadFileAsync(remotePath, stream);
+
+            Snackbar.Add($"Uploaded {file.Name} to {remotePath}.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to upload mission: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isBusy = false;
+            await ClearAsync();
+        }
+    }
+
+    private async Task ClearAsync()
+    {
+        await (_fileUpload?.ClearAsync() ?? Task.CompletedTask);
+        ClearDragClass();
+    }
+
+    private static bool ValidateInput(IReadOnlyList<IBrowserFile> files, out string error)
+    {
+        error = string.Empty;
+
+        if (files.Count == 0)
+        {
+            error = "No files selected.";
+            return false;
+        }
+
+        if (files.Count > 1)
+        {
+            error = "Only one file can be selected.";
+            return false;
+        }
+
+        var extension = Path.GetExtension(files[0].Name).ToLowerInvariant();
+        if (extension != ".pbo")
+        {
+            error = "Only .pbo files are allowed.";
+            return false;
+        }
+
+        return true;
+    }
+
+    private static string BuildRemotePath(string folder, string fileName)
+    {
+        var trimmedFolder = string.IsNullOrWhiteSpace(folder) || folder == "/"
+            ? string.Empty
+            : folder.Trim('/');
+
+        var cleanFileName = Path.GetFileName(fileName);
+        return string.IsNullOrWhiteSpace(trimmedFolder)
+            ? $"/{cleanFileName}"
+            : $"/{trimmedFolder}/{cleanFileName}";
+    }
+
+    private void SetDragClass()
+        => _dragClass = $"{DefaultDragClass} mud-border-primary";
+
+    private void ClearDragClass()
+        => _dragClass = DefaultDragClass;
+}

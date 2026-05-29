@@ -28,6 +28,14 @@
                 <ChildContent>
                     <MudMenuItem Icon="@Icons.Material.Filled.List" Href="build-a-role-sheet">Build-A-Role-Sheet</MudMenuItem>
                     <MudMenuItem Icon="@Icons.Material.Filled.Terminal" Href="command-line-generator">Commandline Generator</MudMenuItem>
+                    <AuthorizeView Policy="IsAuthenticated">
+                        <Authorized>
+                            @if (((KeycloakUser)context.User).IsAllowedMissionUpload)
+                            {
+                                <MudMenuItem Icon="@Icons.Material.Filled.Publish" Href="upload-mission">Upload Mission</MudMenuItem>
+                            }
+                        </Authorized>
+                    </AuthorizeView>
                 </ChildContent>
             </MudMenu>
 

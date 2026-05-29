@@ -8,6 +8,7 @@ using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.AspNetCore.Authentication;
 using System.Security.Claims;
 using ScarletPigsServices.Website.Data.Services.Auth;
+using ScarletPigsServices.Website.Data.Services.FTP;
 using ScarletPigsServices.Website.Data.Services.HTTP;
 using ScarletPigsServices.Website.Components;
 using Microsoft.Extensions.Hosting;
@@ -41,6 +42,24 @@ builder.Services.AddHttpClient<ISteamworksApi, SteamworksApi>(client =>
 {
     client.BaseAddress = new Uri("https://api.steampowered.com/");
 });
+
+builder.Services.AddOptions<HavocFtpOptions>()
+    .Configure<IConfiguration>((options, configuration) =>
+    {
+        options.Host = configuration["HAVOC_SERVER_FTP_HOST"] ?? configuration["HavocFtp:Host"] ?? string.Empty;
+        options.Username = configuration["HAVOC_FTP_USER"] ?? configuration["HavocFtp:Username"] ?? string.Empty;
+        options.Password = configuration["HAVOC_FTP_PASSWORD"] ?? configuration["HavocFtp:Password"] ?? string.Empty;
+        options.RootPath = configuration["HAVOC_SERVER_FTP_ROOT"] ?? configuration["HavocFtp:RootPath"] ?? "/";
+
+        var configuredPort = configuration["HAVOC_SERVER_FTP_PORT"] ?? configuration["HavocFtp:Port"];
+        if (int.TryParse(configuredPort, out var port))
+        {
+            options.Port = port;
+        }
+    });
+
+builder.Services.AddScoped<IHavocFtpConnection, HavocFtpConnection>();
+builder.Services.AddSingleton<IHavocFtpTargetService, HavocFtpTargetService>();
 
 
 // Configure authentication with Keycloak for a public client.

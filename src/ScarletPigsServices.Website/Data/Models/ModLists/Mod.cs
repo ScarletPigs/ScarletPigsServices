@@ -12,6 +12,7 @@ namespace ScarletPigsServices.Website.Data.Models.ModLists
 
         public long SizeInBytes { get; set; }
 
+        private string _commandLineName;
         private string _name;
         public string Name
         {
@@ -41,16 +42,37 @@ namespace ScarletPigsServices.Website.Data.Models.ModLists
             if (IsDlc())
                 return EnumUtil.GetCommandLineName((DlcEnum)int.Parse(UID));
 
-            // else it's a normal mod and we need to clean the name
-            // Regular expression pattern for invalid characters - no longer in use
-            //string pattern = @"[.()!:/]+";
+            if (!string.IsNullOrEmpty(_commandLineName))
+                return _commandLineName;
 
-            //Check for allowed characters
-            string pattern = @"[^a-zA-Z0-9' +\-@_()\[\]]+";
+            if (!ApplySpecialCasesForCommandLineNames())
+                return Name;
 
+            string pattern = @"[^a-zA-Z0-9' +\-@_\[\]]+";
 
-            // Replace invalid characters with an empty string
-            return $"@{Regex.Replace(Name, pattern, string.Empty)}";
+            string commandLineName = Regex.Replace(Name, pattern, string.Empty);
+            commandLineName = Regex.Replace(commandLineName, @"\s{2,}", " ");
+            commandLineName = commandLineName.TrimStart('@');
+
+            if (string.IsNullOrWhiteSpace(commandLineName))
+                return string.Empty;
+
+            _commandLineName = $"@{commandLineName}";
+            return _commandLineName;
+        }
+
+        private bool ApplySpecialCasesForCommandLineNames()
+        {
+            string pattern = string.Empty;
+            switch (UID)
+            {
+                case "894678801":
+                    pattern = @"[()]+";
+                    Name = Regex.Replace(Name, pattern, string.Empty);
+                    return true;
+            }
+
+            return true;
         }
 
         public override bool Equals(object o)

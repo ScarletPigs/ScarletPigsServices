@@ -365,3 +365,4 @@ MigrationBackup/
 FodyWeavers.xsd
 *.env
 *.lscache
+/src/ScarletPigsServices.Piglet/.venv

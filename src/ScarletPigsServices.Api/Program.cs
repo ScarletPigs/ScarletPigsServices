@@ -4,6 +4,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using ScarletPigsServices.Api.Repositories;
 using ScarletPigsServices.Api.Services.Files;
+using ScarletPigsServices.Api.Services.Workshop;
 using ScarletPigsServices.Data;
 using ScarletPigsServices.ServiceReferences;
 using System.Reflection;
@@ -60,6 +61,10 @@ namespace ScarletPigsServices.Api
             builder.AddNpgsqlDbContext<ScarletPigsDbContext>(ServiceRefs.DB);
             builder.Services.AddScoped<IEventRepository, EventRepository>();
             builder.Services.AddSingleton<IHavocFileService, HavocFileService>();
+            builder.Services.AddHttpClient<ISteamWorkshopService, SteamWorkshopService>(client =>
+            {
+                client.BaseAddress = new Uri("https://api.steampowered.com/");
+            });
 
             // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
             builder.Services.AddEndpointsApiExplorer();

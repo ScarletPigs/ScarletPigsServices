@@ -58,12 +58,6 @@ var migrationservice = builder.AddProject<Projects.ScarletPigsServices_Migration
 // Api Service
 var apiService = builder.AddProject<Projects.ScarletPigsServices_Api>(ServiceRefs.API)
     .WaitForCompletion(migrationservice)
-    .WithReference(scarletpigsDb);
-
-// Web Frontend Service
-builder.AddProject<Projects.ScarletPigsServices_Website>(ServiceRefs.WEBSITE)
-    .WithEnvironment(DISCORD_CLIENT_ID.Resource.Name, DISCORD_CLIENT_ID)
-    .WithEnvironment(DISCORD_CLIENT_SECRET.Resource.Name, DISCORD_CLIENT_SECRET)
     .WithEnvironment(HAVOC_SERVER_FTP_HOST.Resource.Name, HAVOC_SERVER_FTP_HOST)
     .WithEnvironment(HAVOC_SERVER_FTP_PORT.Resource.Name, HAVOC_SERVER_FTP_PORT)
     .WithEnvironment(HAVOC_FTP_USER.Resource.Name, HAVOC_FTP_USER)
@@ -74,6 +68,12 @@ builder.AddProject<Projects.ScarletPigsServices_Website>(ServiceRefs.WEBSITE)
     .WithEnvironment(HAVOC_HEADLESS_FTP_USER.Resource.Name, HAVOC_HEADLESS_FTP_USER)
     .WithEnvironment(HAVOC_HEADLESS_FTP_PASSWORD.Resource.Name, HAVOC_HEADLESS_FTP_PASSWORD)
     .WithEnvironment(HAVOC_HEADLESS_FTP_ROOT.Resource.Name, HAVOC_HEADLESS_FTP_ROOT)
+    .WithReference(scarletpigsDb);
+
+// Web Frontend Service
+builder.AddProject<Projects.ScarletPigsServices_Website>(ServiceRefs.WEBSITE)
+    .WithEnvironment(DISCORD_CLIENT_ID.Resource.Name, DISCORD_CLIENT_ID)
+    .WithEnvironment(DISCORD_CLIENT_SECRET.Resource.Name, DISCORD_CLIENT_SECRET)
     .WithExternalHttpEndpoints()
     .WithReference(apiService)
     .WaitFor(apiService);

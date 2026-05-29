@@ -3,16 +3,15 @@
 @using System.Text.RegularExpressions
 @using Microsoft.AspNetCore.Components.Forms
 @using MudBlazor
+@using ScarletPigsServices.Data.Files
 @using ScarletPigsServices.Website.Data.Models.Helpers
 @using ScarletPigsServices.Website.Data.Models.ModLists
-@using ScarletPigsServices.Website.Data.Services.FTP
 @using ScarletPigsServices.Website.Data.Services.HTTP
 @using ScarletPigsServices.Website.Data.Enums
 
 @inject IJSRuntime JS
 @inject ISnackbar Snackbar
-@inject IHavocFtpConnection HavocFtp
-@inject IHavocFtpTargetService HavocFtpTargets
+@inject IScarletPigsApi Api
 
 <MudOverlay Visible="@_isBusy" DarkBackground="true" Class="fullscreen-overlay">
     <MudProgressCircular Indeterminate="true" Size="Size.Large" Color="Color.Primary" />
@@ -335,12 +334,19 @@
         try
         {
             using var cancellationTokenSource = new CancellationTokenSource(TimeSpan.FromSeconds(120));
-            _installedServerMods = await HavocFtp.GetFolderNamesAsync(cancellationTokenSource.Token);
+            var serverFoldersResponse = await Api.GetHavocFoldersAsync(cancellationToken: cancellationTokenSource.Token);
+            if (serverFoldersResponse?.IsConfigured != true)
+            {
+                throw new InvalidOperationException("The server FTP target is not configured.");
+            }
+
+            _installedServerMods = serverFoldersResponse.Folders;
             missingServerModsText = GetMissingModsText(newModlist, _installedServerMods, "server");
 
-            if (HavocFtpTargets.IsConfigured("headless"))
+            var headlessFoldersResponse = await Api.GetHavocFoldersAsync("headless", cancellationTokenSource.Token);
+            if (headlessFoldersResponse?.IsConfigured == true)
             {
-                _installedHeadlessMods = await HavocFtpTargets.GetFolderNamesAsync("headless", cancellationTokenSource.Token);
+                _installedHeadlessMods = headlessFoldersResponse.Folders;
                 missingHCModsText = GetMissingModsText(newModlist, _installedHeadlessMods, "HC");
             }
             else

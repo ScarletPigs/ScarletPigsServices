@@ -3,11 +3,10 @@
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.AspNetCore.Components.Forms
 @using MudBlazor
-@using ScarletPigsServices.Website.Data.Models.Auth
-@using ScarletPigsServices.Website.Data.Services.FTP
+@using ScarletPigsServices.Website.Data.Services.HTTP
 
 @inject AuthenticationStateProvider AuthenticationStateProvider
-@inject IHavocFtpConnection HavocFtp
+@inject IScarletPigsApi Api
 @inject ISnackbar Snackbar
 
 <PageTitle>Upload Mission</PageTitle>
@@ -109,8 +108,8 @@
 
         if (_isAuthenticated)
         {
-            var keycloakUser = new KeycloakUser(authState.User);
-            _canUploadMissions = keycloakUser.IsAllowedMissionUpload;
+            var currentUser = await Api.GetCurrentUserAsync();
+            _canUploadMissions = currentUser?.IsAllowedMissionUpload == true;
 
             if (_canUploadMissions)
             {
@@ -128,7 +127,13 @@
 
         try
         {
-            var folders = await HavocFtp.GetFolderNamesAsync();
+            var response = await Api.GetHavocFoldersAsync();
+            if (response?.IsConfigured != true)
+            {
+                throw new InvalidOperationException("The mission upload target is not configured.");
+            }
+
+            var folders = response.Folders;
             _folders.Clear();
             _folders.Add("/");
             _folders.AddRange(folders);
@@ -162,11 +167,9 @@
             _isBusy = true;
             var file = e.File;
             await using var stream = file.OpenReadStream(MaxMissionUploadBytes);
-            var remotePath = BuildRemotePath(_selectedFolder, file.Name);
+            var uploadResult = await Api.UploadMissionAsync(file.Name, stream, _selectedFolder);
 
-            await HavocFtp.UploadFileAsync(remotePath, stream);
-
-            Snackbar.Add($"Uploaded {file.Name} to {remotePath}.", Severity.Success);
+            Snackbar.Add($"Uploaded {uploadResult?.FileName ?? file.Name} to {uploadResult?.RemotePath ?? BuildRemotePath(_selectedFolder, file.Name)}.", Severity.Success);
         }
         catch (Exception ex)
         {

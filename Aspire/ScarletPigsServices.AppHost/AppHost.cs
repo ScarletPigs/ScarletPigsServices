@@ -60,7 +60,6 @@ builder.AddProject<Projects.ScarletPigsServices_Website>(ServiceRefs.WEBSITE)
 
 // Discord bot service
 // This could totally be switched over to .Net in the future
-#pragma warning disable ASPIREHOSTINGPYTHON001
 var piglet = builder.AddPythonApp(ServiceRefs.DISCORD_BOT, "../../src/ScarletPigsServices.Piglet", "main.py")
     .WithEnvironment("DISCORD_TOKEN", DISCORD_TOKEN)
     .WithEnvironment("CREATOR_ID", CREATOR_ID)
@@ -80,7 +79,6 @@ var piglet = builder.AddPythonApp(ServiceRefs.DISCORD_BOT, "../../src/ScarletPig
     .WithReference(apiService)
     .PublishAsDockerFile()
     .WithExplicitStart();
-#pragma warning restore ASPIREHOSTINGPYTHON001
 
 
 builder.Build().Run();

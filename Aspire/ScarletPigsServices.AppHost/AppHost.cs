@@ -73,13 +73,16 @@ var apiService = builder.AddProject<Projects.ScarletPigsServices_Api>(ServiceRef
     .WithReference(scarletpigsDb);
 
 // Web Frontend Service
+/*
 builder.AddProject<Projects.ScarletPigsServices_Website>(ServiceRefs.WEBSITE)
     .WithEnvironment(DISCORD_CLIENT_ID.Resource.Name, DISCORD_CLIENT_ID)
     .WithEnvironment(DISCORD_CLIENT_SECRET.Resource.Name, DISCORD_CLIENT_SECRET)
     .WithExternalHttpEndpoints()
     .WithReference(apiService)
     .WaitFor(apiService);
+*/
 
+/*
 builder.AddViteApp(ServiceRefs.WEBSITE_SPA, "../../src/ScarletPigsServices.Website.Spa")
     .WithEnvironment("VITE_AUTH_AUTHORITY", "https://keycloak.scarletpigs.com/realms/ScarletPigs")
     .WithEnvironment("VITE_AUTH_CLIENT_ID", "scarletpigsclient")
@@ -87,6 +90,7 @@ builder.AddViteApp(ServiceRefs.WEBSITE_SPA, "../../src/ScarletPigsServices.Websi
     .WithExternalHttpEndpoints()
     .WithReference(apiService)
     .WaitFor(apiService);
+*/
 
 // Discord bot service
 // This could totally be switched over to .Net in the future

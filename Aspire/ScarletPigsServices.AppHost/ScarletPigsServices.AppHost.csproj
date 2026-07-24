@@ -20,6 +20,7 @@
     <ProjectReference Include="..\..\src\ScarletPigsServices.MigrationService\ScarletPigsServices.MigrationService.csproj" />
     <ProjectReference Include="..\..\src\ScarletPigsServices.Api\ScarletPigsServices.Api.csproj" />
     <ProjectReference Include="..\..\src\ScarletPigsServices.Website\ScarletPigsServices.Website.csproj" />
+    <ProjectReference Include="..\..\src\Ridder.Hosting.Dokploy\Ridder.Hosting.Dokploy.csproj" IsAspireProjectResource="false" />
     <ProjectReference Include="..\ScarletPigsServices.ServiceReferences\ScarletPigsServices.ServiceReferences.csproj" IsAspireProjectResource="false" />
   </ItemGroup>
 

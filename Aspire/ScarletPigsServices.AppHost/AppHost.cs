@@ -1,10 +1,12 @@
 using Aspire.Hosting;
+using Ridder.Hosting.Dokploy;
 using ScarletPigsServices.ServiceReferences;
 
 var builder = DistributedApplication.CreateBuilder(args);
 
-// SETUP ENVIRONMENT
-var compose = builder.AddDockerComposeEnvironment("prod");
+// DEPLOYMENT ENVIRONMENT
+var dokploy = builder.AddDokployEnvironment("scarletpigs")
+    .WithHostedRegistry();
 
 
 // ENVIRONMENT PARAMETERS
@@ -45,7 +47,9 @@ var CLIENT_X509_CERT_URL = builder.AddParameterFromConfiguration("client-x509-ce
 
 // Postgres Database
 var dbService = builder.AddPostgres(ServiceRefs.DB_SERVER)
-    .WithPgWeb();
+    .WithDataVolume("scarletpigs-postgres-data")
+    .WithPgWeb()
+    .PublishToDokploy(dokploy);
 var scarletpigsDb = dbService.AddDatabase(ServiceRefs.DB);
 
 
@@ -56,11 +60,13 @@ var scarletpigsDb = dbService.AddDatabase(ServiceRefs.DB);
 // Migration Service
 var migrationservice = builder.AddProject<Projects.ScarletPigsServices_MigrationService>(ServiceRefs.MIGRATION_SERVICE)
     .WaitFor(dbService)
-    .WithReference(scarletpigsDb);
+    .WithReference(scarletpigsDb)
+    .PublishToDokploy(dokploy);
 
 // Api Service
 var apiService = builder.AddProject<Projects.ScarletPigsServices_Api>(ServiceRefs.API)
     .WaitForCompletion(migrationservice)
+    .WithExternalHttpEndpoints()
     .WithEnvironment("Authentication__SigningKey", JWT_SIGNING_KEY)
     .WithEnvironment("HAVOC_SERVER_FTP_HOST", HAVOC_SERVER_FTP_HOST)
     .WithEnvironment("HAVOC_SERVER_FTP_PORT", HAVOC_SERVER_FTP_PORT)
@@ -72,7 +78,8 @@ var apiService = builder.AddProject<Projects.ScarletPigsServices_Api>(ServiceRef
     .WithEnvironment("HAVOC_HEADLESS_FTP_USER", HAVOC_HEADLESS_FTP_USER)
     .WithEnvironment("HAVOC_HEADLESS_FTP_PASSWORD", HAVOC_HEADLESS_FTP_PASSWORD)
     .WithEnvironment("HAVOC_HEADLESS_FTP_ROOT", HAVOC_HEADLESS_FTP_ROOT)
-    .WithReference(scarletpigsDb);
+    .WithReference(scarletpigsDb)
+    .PublishToDokploy(dokploy);
 
 // Web Frontend Service
 /*
@@ -118,6 +125,7 @@ var piglet = builder.AddPythonApp(ServiceRefs.DISCORD_BOT, "../../src/ScarletPig
     .WithEnvironment("SCARLETPIGS_API", apiService.GetEndpoint("http"))
     .WithReference(apiService)
     .PublishAsDockerFile()
+    .PublishToDokploy(dokploy)
     .WithExplicitStart();
 
 

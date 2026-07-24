@@ -1,10 +1,18 @@
-import sys
+from discordbot import *
+import multiprocessing
+import os
+import utils
 
-from bot.bootstrap import run_main
+log = utils.log_handler
 
 
 def main():
-    run_main(sys.argv[1:])
+    # Run the bot
+    discordtoken = os.getenv("DISCORD_TOKEN")
+    if discordtoken:
+        BOT.run(token=discordtoken)
+    else:
+        print("No discord token found. Please set the DISCORD_TOKEN environment variable.")
 
 
 if __name__ == "__main__":

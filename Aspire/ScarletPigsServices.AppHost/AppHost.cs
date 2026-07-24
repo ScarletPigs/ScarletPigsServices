@@ -23,6 +23,8 @@ var HAVOC_HEADLESS_FTP_PASSWORD = builder.AddParameterFromConfiguration("havoc-h
 var HAVOC_HEADLESS_FTP_ROOT = builder.AddParameterFromConfiguration("havoc-headless-ftp-root", "HAVOC_HEADLESS_FTP_ROOT", false).WithDescription("Optional root path used when checking headless FTP mod folders for website command-line parity.");
 var CREATOR_ID = builder.AddParameterFromConfiguration("CREATORID", "CREATORID", true).WithDescription("The Discord user ID of the creator of the piglet bot, used for various operations.");
 var GITHUB_TOKEN = builder.AddParameterFromConfiguration("GITHUBTOKEN", "GITHUBTOKEN", true).WithDescription("GitHub token for accessing repositories and performing actions on behalf of the bot.");
+var SERVER_IP = builder.AddParameterFromConfiguration("server-ip", "SERVER_IP", false).WithDescription("Game server hostname or IP address queried by the Piglet bot for Discord presence.");
+var SERVER_PORT = builder.AddParameterFromConfiguration("server-port", "SERVER_PORT", false).WithDescription("Game server port queried by the Piglet bot for Discord presence.");
 var GOOGLE_SHEET_NAME = builder.AddParameterFromConfiguration("google-sheet-name", "GOOGLE_SHEET_NAME", true).WithDescription("Google Sheets workbook name used by the Piglet bot for schedule and questionnaire data.");
 var TYPE = builder.AddParameterFromConfiguration("type", "TYPE", true).WithDescription("Google service account credential type for the Piglet bot.");
 var PROJECT_ID = builder.AddParameterFromConfiguration("project-id", "PROJECT_ID", true).WithDescription("Google Cloud project ID for the Piglet bot service account.");
@@ -89,9 +91,13 @@ builder.AddViteApp(ServiceRefs.WEBSITE_SPA, "../../src/ScarletPigsServices.Websi
 // Discord bot service
 // This could totally be switched over to .Net in the future
 var piglet = builder.AddPythonApp(ServiceRefs.DISCORD_BOT, "../../src/ScarletPigsServices.Piglet", "main.py")
+    .WithVirtualEnvironment(".venv")
+    .WithPip()
     .WithEnvironment("DISCORD_TOKEN", DISCORD_TOKEN)
     .WithEnvironment("CREATOR_ID", CREATOR_ID)
     .WithEnvironment("GITHUB_TOKEN", GITHUB_TOKEN)
+    .WithEnvironment("SERVER_IP", SERVER_IP)
+    .WithEnvironment("SERVER_PORT", SERVER_PORT)
     .WithEnvironment("GOOGLE_SHEET_NAME", GOOGLE_SHEET_NAME)
     .WithEnvironment("TYPE", TYPE)
     .WithEnvironment("PROJECT_ID", PROJECT_ID)

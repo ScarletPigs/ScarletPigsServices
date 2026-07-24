@@ -6,7 +6,6 @@
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/Ridder.Hosting.Dokploy/Ridder.Hosting.Dokploy.csproj" />
-    <Project Path="src/ScarletPigsServices.MigrationService/ScarletPigsServices.MigrationService.csproj" />
     <Project Path="src/ScarletPigsServices.Api/ScarletPigsServices.Api.csproj" />
     <Project Path="src/ScarletPigsServices.Data/ScarletPigsServices.Data.csproj" />
     <Project Path="src/ScarletPigsServices.Website/ScarletPigsServices.Website.csproj" />

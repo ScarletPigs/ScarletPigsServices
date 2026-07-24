@@ -57,15 +57,8 @@ var scarletpigsDb = dbService.AddDatabase(ServiceRefs.DB);
 
 // SERVICES
 
-// Migration Service
-var migrationservice = builder.AddProject<Projects.ScarletPigsServices_MigrationService>(ServiceRefs.MIGRATION_SERVICE)
-    .WaitFor(dbService)
-    .WithReference(scarletpigsDb)
-    .PublishToDokploy(dokploy);
-
 // Api Service
 var apiService = builder.AddProject<Projects.ScarletPigsServices_Api>(ServiceRefs.API)
-    .WaitForCompletion(migrationservice)
     .WithExternalHttpEndpoints()
     .WithEnvironment("Authentication__SigningKey", JWT_SIGNING_KEY)
     .WithEnvironment("HAVOC_SERVER_FTP_HOST", HAVOC_SERVER_FTP_HOST)
@@ -80,6 +73,18 @@ var apiService = builder.AddProject<Projects.ScarletPigsServices_Api>(ServiceRef
     .WithEnvironment("HAVOC_HEADLESS_FTP_ROOT", HAVOC_HEADLESS_FTP_ROOT)
     .WithReference(scarletpigsDb)
     .PublishToDokploy(dokploy);
+
+// Entity Framework migrations
+var migrations = apiService
+    .AddEFMigrations(ServiceRefs.MIGRATIONS)
+    .WithMigrationsProject("../../src/ScarletPigsServices.Data/ScarletPigsServices.Data.csproj")
+    .WithReference(scarletpigsDb)
+    .WaitFor(dbService)
+    .RunDatabaseUpdateOnStart()
+    .PublishAsMigrationBundle(targetRuntime: "linux-x64", publishContainer: true)
+    .PublishToDokploy(dokploy);
+
+apiService.WaitFor(migrations);
 
 // Web Frontend Service
 /*

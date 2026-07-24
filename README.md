@@ -5,9 +5,14 @@ Repository hosting the various services used on the Scarlet Pigs server.
 ## Dokploy deployment
 
 The AppHost includes a vendored Dokploy publishing integration and publishes
-PostgreSQL, the migration service, the API, and the Piglet bot. The two website
+PostgreSQL, an EF Core migration bundle, the API, and the Piglet bot. The two website
 resources remain disabled and are not included in deployment. The API's HTTP
 endpoint is external, so the integration creates or updates its Dokploy domain.
+
+During local AppHost execution, Aspire runs `dotnet ef database update` and
+holds the API until migrations complete. During publishing, Aspire builds a
+Linux migration-bundle container that Dokploy deploys using the database
+connection supplied by the AppHost.
 
 The Dokploy environment uses an existing hosted container registry. During
 deployment, Aspire prompts for:

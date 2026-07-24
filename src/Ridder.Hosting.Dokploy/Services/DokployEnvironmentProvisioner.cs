@@ -57,7 +57,8 @@ internal sealed class DokployEnvironmentProvisioner : IDokployEnvironmentProvisi
         }
 
 #pragma warning disable ASPIRECONTAINERRUNTIME001
-        var containerRuntime = context.Services.GetRequiredService<IContainerRuntime>();
+        var containerRuntimeResolver = context.Services.GetRequiredService<IContainerRuntimeResolver>();
+        var containerRuntime = await containerRuntimeResolver.ResolveAsync(context.CancellationToken);
 #pragma warning restore ASPIRECONTAINERRUNTIME001
         await containerRuntime.LoginToRegistryAsync(
             registry.RegistryUrl,

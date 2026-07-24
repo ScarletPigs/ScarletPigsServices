@@ -21,6 +21,11 @@ deployment, Aspire prompts for:
 - the container registry URL, username, and password;
 - any application parameters and secrets that have not already been configured.
 
+The [Dokploy deployment workflow](.github/workflows/deploy.yml) runs on every
+push to `main`. Create a GitHub environment named `production` and populate the
+environment secrets referenced by the workflow. The workflow validates every
+required value before running `aspire deploy --environment Production`.
+
 Inspect the deployment pipeline without changing external state:
 
 ```powershell

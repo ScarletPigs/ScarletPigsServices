@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.IdentityModel.Tokens.Jwt;
 using ScarletPigsServices.Data.Auth;
 
 namespace ScarletPigsServices.Api.Extensions
@@ -7,24 +8,26 @@ namespace ScarletPigsServices.Api.Extensions
     {
         public static CurrentUserResponse ToCurrentUserResponse(this ClaimsPrincipal user)
         {
-            var id = user.FindFirstValue("discordid") ?? string.Empty;
-            var avatarHash = user.FindFirstValue("useravatar") ?? string.Empty;
+            var id = user.FindFirstValue(JwtRegisteredClaimNames.Sub)
+                ?? user.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? string.Empty;
+            var userName = user.FindFirstValue(ClaimTypes.Name)
+                ?? user.FindFirstValue(JwtRegisteredClaimNames.UniqueName)
+                ?? string.Empty;
             var roles = user.GetRoles();
 
             return new CurrentUserResponse
             {
                 Id = id,
                 Email = user.FindFirstValue(ClaimTypes.Email) ?? string.Empty,
-                GlobalName = user.FindFirstValue("global_name") ?? string.Empty,
-                UserName = user.FindFirstValue("username") ?? string.Empty,
-                AvatarHash = avatarHash,
-                AvatarUrl = string.IsNullOrWhiteSpace(avatarHash) || string.IsNullOrWhiteSpace(id)
-                    ? "https://placehold.co/50"
-                    : $"https://cdn.discordapp.com/avatars/{id}/{avatarHash}.png",
+                GlobalName = userName,
+                UserName = userName,
+                AvatarHash = string.Empty,
+                AvatarUrl = "https://placehold.co/50",
                 Roles = roles,
-                IsAdmin = roles.Contains("UnitOrganizer", StringComparer.OrdinalIgnoreCase),
-                IsAllowedMissionUpload = roles.Contains("UnitOrganizer", StringComparer.OrdinalIgnoreCase)
-                    || roles.Contains("MissionMaker", StringComparer.OrdinalIgnoreCase)
+                IsAdmin = roles.Contains(AuthRoles.UnitOrganizer, StringComparer.OrdinalIgnoreCase),
+                IsAllowedMissionUpload = roles.Contains(AuthRoles.UnitOrganizer, StringComparer.OrdinalIgnoreCase)
+                    || roles.Contains(AuthRoles.MissionMaker, StringComparer.OrdinalIgnoreCase)
             };
         }
 

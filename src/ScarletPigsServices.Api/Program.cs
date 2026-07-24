@@ -1,11 +1,16 @@
 using System.Security.Claims;
+using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using ScarletPigsServices.Api.Authentication;
 using ScarletPigsServices.Api.Repositories;
 using ScarletPigsServices.Api.Services.Files;
 using ScarletPigsServices.Api.Services.Workshop;
 using ScarletPigsServices.Data;
+using ScarletPigsServices.Data.Auth;
 using ScarletPigsServices.ServiceReferences;
 using System.Reflection;
 
@@ -21,24 +26,44 @@ namespace ScarletPigsServices.Api
 
             builder.Services.AddControllers();
 
-            var authAuthority = builder.Configuration["Authentication:Authority"]
-                ?? "https://keycloak.scarletpigs.com/realms/ScarletPigs";
-            var authAudience = builder.Configuration["Authentication:Audience"]
-                ?? builder.Configuration["Authentication:ClientId"]
-                ?? "scarletpigsclient";
+            builder.Services.AddOptions<JwtOptions>()
+                .Bind(builder.Configuration.GetSection(JwtOptions.SectionName))
+                .Validate(options => !string.IsNullOrWhiteSpace(options.Issuer), "Authentication:Issuer is required.")
+                .Validate(options => !string.IsNullOrWhiteSpace(options.Audience), "Authentication:Audience is required.")
+                .Validate(
+                    options => Encoding.UTF8.GetByteCount(options.SigningKey) >= 32,
+                    "Authentication:SigningKey must contain at least 32 bytes.")
+                .Validate(options => options.AccessTokenMinutes > 0, "Authentication:AccessTokenMinutes must be greater than zero.")
+                .Validate(options => options.RefreshTokenDays > 0, "Authentication:RefreshTokenDays must be greater than zero.")
+                .ValidateOnStart();
 
             builder.Services
                 .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 .AddJwtBearer(options =>
                 {
-                    options.Authority = authAuthority;
-                    options.Audience = authAudience;
-                    options.RequireHttpsMetadata = true;
+                    options.MapInboundClaims = false;
+                });
+
+            builder.Services
+                .AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
+                .Configure<IOptions<JwtOptions>>((options, jwtOptionsAccessor) =>
+                {
+                    var jwtOptions = jwtOptionsAccessor.Value;
                     options.TokenValidationParameters = new TokenValidationParameters
                     {
-                        NameClaimType = "global_name",
+                        ValidateIssuerSigningKey = true,
+                        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.SigningKey)),
+                        ValidateIssuer = true,
+                        ValidIssuer = jwtOptions.Issuer,
+                        ValidateAudience = true,
+                        ValidAudience = jwtOptions.Audience,
+                        ValidateLifetime = true,
+                        RequireExpirationTime = true,
+                        RequireSignedTokens = true,
+                        ValidAlgorithms = [SecurityAlgorithms.HmacSha256],
+                        ClockSkew = TimeSpan.FromSeconds(30),
+                        NameClaimType = ClaimTypes.Name,
                         RoleClaimType = ClaimTypes.Role,
-                        ValidateAudience = true
                     };
                 });
 
@@ -47,18 +72,27 @@ namespace ScarletPigsServices.Api
                 options.AddPolicy("CanUploadMissions", policy =>
                 {
                     policy.RequireAuthenticatedUser();
-                    policy.RequireAssertion(context =>
-                    {
-                        return context.User.Claims.Any(claim =>
-                            (claim.Type == ClaimTypes.Role || claim.Type == "roles")
-                            && (string.Equals(claim.Value, "UnitOrganizer", StringComparison.OrdinalIgnoreCase)
-                                || string.Equals(claim.Value, "MissionMaker", StringComparison.OrdinalIgnoreCase)));
-                    });
+                    policy.RequireRole(AuthRoles.UnitOrganizer, AuthRoles.MissionMaker);
                 });
             });
 
             // Register services
             builder.AddNpgsqlDbContext<ScarletPigsDbContext>(ServiceRefs.DB);
+            builder.Services
+                .AddIdentityCore<ApplicationUser>(options =>
+                {
+                    options.User.RequireUniqueEmail = true;
+                    options.Password.RequiredLength = 12;
+                    options.Lockout.AllowedForNewUsers = true;
+                    options.Lockout.MaxFailedAccessAttempts = 5;
+                    options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
+                })
+                .AddRoles<IdentityRole>()
+                .AddSignInManager()
+                .AddEntityFrameworkStores<ScarletPigsDbContext>()
+                .AddDefaultTokenProviders();
+            builder.Services.AddSingleton(TimeProvider.System);
+            builder.Services.AddScoped<ITokenService, JwtTokenService>();
             builder.Services.AddScoped<IEventRepository, EventRepository>();
             builder.Services.AddSingleton<IHavocFileService, HavocFileService>();
             builder.Services.AddHttpClient<ISteamWorkshopService, SteamWorkshopService>(client =>
@@ -79,7 +113,7 @@ namespace ScarletPigsServices.Api
                     Scheme = "bearer",
                     BearerFormat = "JWT",
                     In = ParameterLocation.Header,
-                    Description = "Provide a Keycloak bearer token to call authenticated endpoints."
+                    Description = "Provide an access token issued by the Scarlet Pigs authentication endpoints."
                 });
                 options.AddSecurityRequirement(new OpenApiSecurityRequirement
                 {

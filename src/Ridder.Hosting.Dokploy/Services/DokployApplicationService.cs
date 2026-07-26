@@ -782,14 +782,26 @@ internal sealed class DokployApplicationService
             return normalized;
         }
 
-        // Dokploy parses this payload with dotenv. Escape existing backslashes first,
-        // then encode real newlines so dotenv restores them instead of leaving a
-        // stray backslash before each newline.
+        // Dokploy parses this payload with dotenv. Single quotes and backticks
+        // preserve both genuine newlines and existing escape sequences verbatim.
+        // Double quotes would interpret \n sequences and corrupt PEM secrets that
+        // are already stored in their common JSON-escaped form.
+        if (!normalized.Contains('\'', StringComparison.Ordinal))
+        {
+            return $"'{normalized}'";
+        }
+
+        if (!normalized.Contains('`', StringComparison.Ordinal))
+        {
+            return $"`{normalized}`";
+        }
+
+        // Values containing both literal quote delimiters are uncommon. Use
+        // dotenv's double-quoted form as a last resort.
         var encoded = normalized
             .Replace("\\", "\\\\", StringComparison.Ordinal)
             .Replace("\"", "\\\"", StringComparison.Ordinal)
             .Replace("\n", "\\n", StringComparison.Ordinal);
-
         return $"\"{encoded}\"";
     }
 

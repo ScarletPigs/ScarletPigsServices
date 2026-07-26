@@ -27,8 +27,11 @@ registry digest and gives Dokploy the combined `image:latest@sha256:...`
 reference. This keeps the readable alias while preventing Docker Swarm from
 reusing stale bytes cached under a mutable tag. The pipeline then waits for a
 new Swarm task and verifies that its service specification references that
-exact digest. A stale rollout therefore fails the pipeline instead of being
-reported as successfully deployed.
+exact digest and remains running through a stability window (or completes
+successfully for a one-shot service). A stale or immediately crashing rollout
+therefore fails the pipeline instead of being reported as successfully
+deployed. Multiline environment values are encoded for Dokploy's dotenv parser,
+including PEM private keys.
 
 The [Dokploy deployment workflow](.github/workflows/deploy.yml) runs on every
 push to `main`. Create a GitHub environment named `production` and populate the

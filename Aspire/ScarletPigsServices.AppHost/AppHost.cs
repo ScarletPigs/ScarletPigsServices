@@ -81,7 +81,10 @@ var migrations = apiService
     .WithReference(scarletpigsDb)
     .WaitFor(dbService)
     .RunDatabaseUpdateOnStart()
-    .PublishAsMigrationBundle(targetRuntime: "linux-x64", publishContainer: true)
+    .PublishAsMigrationBundle(
+        targetRuntime: "linux-x64",
+        publishContainer: true,
+        baseImage: "mcr.microsoft.com/dotnet/aspnet:10.0")
     .PublishToDokploy(dokploy);
 
 apiService.WaitFor(migrations);

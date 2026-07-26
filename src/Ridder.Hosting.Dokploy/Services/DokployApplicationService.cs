@@ -124,7 +124,7 @@ internal sealed class DokployApplicationService
 
         var registryUrl = _client.RegistrySettings.RegistryUrl;
 
-        var dockerImage = await ResolveDockerImageAsync(rsc, cancellationToken);
+        var dockerImage = await ResolveDeploymentImageAsync(rsc, cancellationToken);
 
         var saveDockerProviderBody = JsonSerializer.Serialize(new
         {
@@ -191,7 +191,7 @@ internal sealed class DokployApplicationService
         IReadOnlySet<string> existingTaskIds,
         CancellationToken cancellationToken)
     {
-        var expectedImage = await ResolveDockerImageAsync(resource, cancellationToken);
+        var expectedImage = await ResolveDeploymentImageAsync(resource, cancellationToken);
         var appName = GetDokployApplicationName(application, resource);
         var deadline = DateTimeOffset.UtcNow + DeploymentVerificationTimeout;
         var observedImages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -256,6 +256,23 @@ internal sealed class DokployApplicationService
         throw new InvalidOperationException($"Compute resource '{resource.Name}' does not have Docker image information in annotations or properties.");
     }
 
+    private async Task<string> ResolveDeploymentImageAsync(
+        IComputeResource resource,
+        CancellationToken cancellationToken)
+    {
+        var image = await ResolveDockerImageAsync(resource, cancellationToken);
+        var digestReference = await ContainerRegistryDigestResolver.ResolveAsync(
+            image,
+            _client.RegistrySettings,
+            cancellationToken);
+
+        _client.Logger.LogInformation(
+            "Resolved immutable deployment image for {ResourceName}: {ImageReference}.",
+            resource.Name,
+            digestReference);
+        return digestReference;
+    }
+
     private async Task<List<DokployServiceTask>> GetServiceTasksAsync(
         DokployApplication application,
         CancellationToken cancellationToken)
@@ -293,11 +310,6 @@ internal sealed class DokployApplicationService
         static string Normalize(string image)
         {
             var normalized = image.Trim();
-            var digestIndex = normalized.IndexOf('@');
-            if (digestIndex >= 0)
-            {
-                normalized = normalized[..digestIndex];
-            }
 
             foreach (var prefix in new[] { "docker.io/", "index.docker.io/", "registry-1.docker.io/" })
             {

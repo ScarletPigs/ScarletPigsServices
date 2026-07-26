@@ -115,10 +115,19 @@ internal sealed class DokployEnvironmentProvisioner : IDokployEnvironmentProvisi
             await applicationService.ConfigureApplicationAsync(app.Application, projectName, app.Resource, context.ExecutionContext, applicationHostsByResource, context.CancellationToken);
         }
 
+        var deploymentBaselines = new List<(IComputeResource Resource, DokployApplication Application, HashSet<string> ExistingTaskIds)>();
         foreach (var app in applications)
         {
-            await applicationService.DeployApplicationAsync(app.Application, app.Resource);
+            var existingTaskIds = await applicationService.DeployApplicationAsync(app.Application, app.Resource, context.CancellationToken);
+            deploymentBaselines.Add((app.Resource, app.Application, existingTaskIds));
         }
+
+        await Task.WhenAll(deploymentBaselines.Select(app =>
+            applicationService.VerifyApplicationDeploymentAsync(
+                app.Application,
+                app.Resource,
+                app.ExistingTaskIds,
+                context.CancellationToken)));
     }
 }
 #pragma warning restore ASPIREPIPELINES001

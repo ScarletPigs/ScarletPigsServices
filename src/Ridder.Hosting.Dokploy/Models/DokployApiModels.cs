@@ -209,6 +209,24 @@ internal sealed class DokployApplication
     public string? Password { get; init; } = string.Empty;
 }
 
+internal sealed class DokployServiceTask
+{
+    [JsonPropertyName("containerId")]
+    public string Id { get; init; } = string.Empty;
+
+    [JsonPropertyName("name")]
+    public string Name { get; init; } = string.Empty;
+
+    [JsonPropertyName("state")]
+    public string State { get; init; } = string.Empty;
+
+    [JsonPropertyName("currentState")]
+    public string CurrentState { get; init; } = string.Empty;
+
+    [JsonPropertyName("error")]
+    public string Error { get; init; } = string.Empty;
+}
+
 internal sealed class TrpcEnvelope<T>
 {
     [JsonPropertyName("result")]

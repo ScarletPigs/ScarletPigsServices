@@ -14,6 +14,7 @@ public static class DokployExtensions
 {
     private const string DefaultRegistryUsername = "docker";
     private const string DefaultRegistryPassword = "password";
+    private const string DefaultRemoteImageTag = "latest";
 
     /// <summary>
     /// Adds a Dokploy environment resource to the distributed application.
@@ -231,10 +232,16 @@ public static class DokployExtensions
         var options = new DokployApplicationOptions();
         configure(options);
 
+#pragma warning disable ASPIREPIPELINES003
+        // A stable tag lets Dokploy keep one readable service image reference
+        // and force-pull the newly published manifest on each deployment.
+        builder.WithRemoteImageTag(DefaultRemoteImageTag);
+#pragma warning restore ASPIREPIPELINES003
+
         builder.WithAnnotation(new DokployPublishApplicationAnnotation(environmentBuilder.Resource, options), ResourceAnnotationMutationBehavior.Replace);
 
 #pragma warning disable ASPIRECOMPUTE003
-    builder.WithAnnotation(new RegistryTargetAnnotation(environmentBuilder.Resource), ResourceAnnotationMutationBehavior.Replace);
+        builder.WithAnnotation(new RegistryTargetAnnotation(environmentBuilder.Resource), ResourceAnnotationMutationBehavior.Replace);
 #pragma warning restore ASPIRECOMPUTE003
 
         if (!builder.Resource.TryGetAnnotationsOfType<DokployManifestAnnotation>(out _))

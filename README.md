@@ -21,6 +21,12 @@ deployment, Aspire prompts for:
 - the container registry URL, username, and password;
 - any application parameters and secrets that have not already been configured.
 
+Resources published with `PublishToDokploy` use the readable `latest` image tag
+by default. The deploy pipeline asks Dokploy to pull that tag, then waits for a
+new Docker Swarm task and verifies that its service specification references
+the image Aspire just published. A stale rollout therefore fails the pipeline
+instead of being reported as successfully deployed.
+
 The [Dokploy deployment workflow](.github/workflows/deploy.yml) runs on every
 push to `main`. Create a GitHub environment named `production` and populate the
 environment secrets referenced by the workflow. The workflow validates every

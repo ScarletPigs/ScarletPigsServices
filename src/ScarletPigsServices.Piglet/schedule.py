@@ -1,220 +1,221 @@
+from genericpath import isfile
+from dotenv import load_dotenv
+from oauth2client.service_account import ServiceAccountCredentials
 import os
+import gspread
 import datetime
 import json
-from typing import Any, Dict, List, Optional, Tuple
-
-from dotenv import load_dotenv
 import utils
-import scarletpigsapi
 
 log = utils.log_handler
 
-# Load environment variables (for defaults like API URL and counts)
+# Load environment variables
 load_dotenv()
+private_key = os.getenv('PRIVATE_KEY')
+if private_key is None:
+    raise ValueError("PRIVATE_KEY environment variable is not set.")
+keyvar = {
+    "type": os.getenv('TYPE'),
+    "project_id": os.getenv('PROJECT_ID'),
+    "private_key_id": os.getenv('PRIVATE_KEY_ID'),
+    "private_key": private_key.replace('\\n', '\n'),
+    "client_email": os.getenv('CLIENT_EMAIL'),
+    "client_id": os.getenv('CLIENT_ID'),
+    "auth_uri": os.getenv('AUTH_URI'),
+    "token_uri": os.getenv('TOKEN_URI'),
+    "auth_provider_x509_cert_url": os.getenv('AUTH_PROVIDER_X509_CERT_URL'),
+    "client_x509_cert_url": os.getenv('CLIENT_X509_CERT_URL')
+}
 
-# -----------------------------
-# Local JSON state persistence
-# -----------------------------
+# Set up sheets credentials
+scope = ['https://www.googleapis.com/auth/spreadsheets',
+         "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive"]
+creds = ServiceAccountCredentials.from_json_keyfile_dict(
+    keyfile_dict=keyvar, scopes=scope)  # type: ignore
+client = gspread.authorize(creds)  # type: ignore
 
-STATE_DIR = os.path.join(os.path.dirname(__file__), "files")
-STATE_PATH = os.path.join(STATE_DIR, "piglet_state.json")
+# Set up sheets
+sheet_name = os.getenv("GOOGLE_SHEET_NAME")
+if sheet_name is None:
+    raise ValueError("GOOGLE_SHEET_NAME environment variable is not set.")
+sheets = client.open(sheet_name).worksheets()
+sheet1 = sheets[0]
+archive_sheet = sheets[1]
+dlc_sheet = sheets[2]
+entire_sheet = sheet1.get_all_values()
 
-
-def _ensure_state_dir():
-    os.makedirs(STATE_DIR, exist_ok=True)
-
-
-def _load_state() -> Dict[str, Any]:
-    _ensure_state_dir()
-    if os.path.exists(STATE_PATH):
-        try:
-            with open(STATE_PATH, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            pass
-    # default state
-    return {
-        "schedule_dates_count": int(os.getenv("SCHEDULE_DATES_COUNT", "10")),
-        "schedule_messages": {"servers": []},
-        "modlist_messages": {"servers": []},
-        "questionnaire_message": None,
-        # Header row then [Name, Count, Emoji]
-        "questionnaire_info": [["DLC", "Count", "Emoji"]],
-    }
-
-
-def _save_state(state: Dict[str, Any]) -> None:
-    _ensure_state_dir()
-    with open(STATE_PATH, "w", encoding="utf-8") as f:
-        json.dump(state, f, indent=2)
+# Get cell entry
 
 
-def _get_date_amount() -> int:
-    state = _load_state()
-    try:
-        return int(state.get("schedule_dates_count", 10))
-    except Exception:
-        return 10
+def get_cell_entry(row: int, column: int):
+    return entire_sheet[row-1][column-1]
+
+# Set cell entry
 
 
-# ---------------------
-# Scheduled msg mapping
-# ---------------------
+def set_cell_entry(row: int, column: int, value: str):
+    entire_sheet[row-1][column-1] = value
 
-def get_schedule_messages() -> Dict[str, List[Dict[str, int]]]:
-    state = _load_state()
-    return state.get("schedule_messages", {"servers": []})
+
+# Settings entered on the sheet
+date_amount = int(get_cell_entry(2, 7))
+schedule_message_info = get_cell_entry(3, 7)
+modlist_message_info = get_cell_entry(4, 7)
+questionnaire_message_info = get_cell_entry(5, 7)
+
+# Update local sheet
+
+
+def update_local_sheet():
+    global entire_sheet
+    global date_amount
+    global schedule_message_info
+    global modlist_message_info
+    entire_sheet = sheet1.get_all_values()
+    date_amount = int(get_cell_entry(2, 7))
+    schedule_message_info = get_cell_entry(3, 7)
+    modlist_message_info = get_cell_entry(4, 7)
+    questionnaire_message_info = get_cell_entry(5, 7)
+
+
+# Update online sheet
+def update_online_sheet():
+    sheet1.update(entire_sheet)
+
+# Get schedule messages
+
+
+def get_schedule_messages():
+    if schedule_message_info == "" or schedule_message_info == None:
+        return {"servers": []}
+    else:
+        return json.loads(schedule_message_info)
 
 # Save schedule message
 
 
 def set_schedule_message_id(guild_id: int, channel_id: int, message_id: int):
-    state = _load_state()
-    serverdata = state.get("schedule_messages", {"servers": []})
-    guild_ids = [server.get("guild_id")
-                 for server in serverdata.get("servers", [])]
+    serverdata = get_schedule_messages()
+    guild_ids = [server["guild_id"] for server in serverdata["servers"]]
 
-    if guild_id in guild_ids:
+    if (guild_id in guild_ids):
         index = guild_ids.index(guild_id)
         serverdata["servers"][index]["channel_id"] = channel_id
         serverdata["servers"][index]["message_id"] = message_id
     else:
-        serverdata.setdefault("servers", []).append(
-            {"guild_id": guild_id, "channel_id": channel_id, "message_id": message_id}
-        )
+        serverdata["servers"].append(
+            {"guild_id": guild_id, "channel_id": channel_id, "message_id": message_id})
 
-    state["schedule_messages"] = serverdata
-    _save_state(state)
+    set_cell_entry(3, 7, json.dumps(serverdata))
+    update_online_sheet()
 
 # Remove a schedule message
 
 
 def remove_schedule_message(id: int):
-    state = _load_state()
-    serverdata = state.get("schedule_messages", {"servers": []})
-    servers = serverdata.get("servers", [])
-    guild_ids = [server.get("guild_id") for server in servers]
-    channel_ids = [server.get("channel_id") for server in servers]
-    message_ids = [server.get("message_id") for server in servers]
+    serverdata = get_schedule_messages()
+    guild_ids = [server["guild_id"] for server in serverdata["servers"]]
+    channel_ids = [server["channel_id"] for server in serverdata["servers"]]
+    message_ids = [server["message_id"] for server in serverdata["servers"]]
 
-    index = -1
-    if id in guild_ids:
+    if (id in guild_ids):
         index = guild_ids.index(id)
-    elif id in channel_ids:
+    elif (id in channel_ids):
         index = channel_ids.index(id)
-    elif id in message_ids:
+    elif (id in message_ids):
         index = message_ids.index(id)
     else:
         return
 
-    servers.pop(index)
-    state["schedule_messages"] = {"servers": servers}
-    _save_state(state)
+    serverdata["servers"].pop(index)
+
+    set_cell_entry(3, 7, json.dumps(serverdata))
+    update_online_sheet()
+
+# Get modlist messages
 
 
-def get_modlist_messages() -> Dict[str, List[Dict[str, Any]]]:
-    state = _load_state()
-    return state.get("modlist_messages", {"servers": []})
+def get_modlist_messages():
+    if modlist_message_info == "" or modlist_message_info == None:
+        return {"servers": []}
+    else:
+        return json.loads(modlist_message_info)
 
 # Save modlist message
 
 
 def add_modlist_message(guild_id: int, channel_id: int, message_id: int, file_path: str):
-    state = _load_state()
-    serverdata = state.get("modlist_messages", {"servers": []})
-    serverdata.setdefault("servers", []).append(
-        {"guild_id": guild_id, "channel_id": channel_id,
-            "message_id": message_id, "file_path": file_path}
-    )
-    state["modlist_messages"] = serverdata
-    _save_state(state)
+    serverdata = get_modlist_messages()
+    serverdata["servers"].append(
+        {"guild_id": guild_id, "channel_id": channel_id, "message_id": message_id, "file_path": file_path})
+
+    set_cell_entry(4, 7, json.dumps(serverdata))
+    update_online_sheet()
 
 # Remove a modlist message
 
 
 def remove_modlist_message(id: int):
-    state = _load_state()
-    serverdata = state.get("modlist_messages", {"servers": []})
-    servers = serverdata.get("servers", [])
-    guild_ids = [server.get("guild_id") for server in servers]
-    channel_ids = [server.get("channel_id") for server in servers]
-    message_ids = [server.get("message_id") for server in servers]
+    serverdata = get_modlist_messages()
+    guild_ids = [server["guild_id"] for server in serverdata["servers"]]
+    channel_ids = [server["channel_id"] for server in serverdata["servers"]]
+    message_ids = [server["message_id"] for server in serverdata["servers"]]
 
-    index = -1
-    if id in guild_ids:
+    if (id in guild_ids):
         index = guild_ids.index(id)
-    elif id in channel_ids:
+    elif (id in channel_ids):
         index = channel_ids.index(id)
-    elif id in message_ids:
+    elif (id in message_ids):
         index = message_ids.index(id)
     else:
         return
 
-    servers.pop(index)
-    state["modlist_messages"] = {"servers": servers}
-    _save_state(state)
+    serverdata["servers"].pop(index)
+
+    set_cell_entry(4, 7, json.dumps(serverdata))
+    update_online_sheet()
+
+# Get questionnaire messages
 
 
-def get_questionnaire_message() -> Optional[Dict[str, int]]:
-    state = _load_state()
-    return state.get("questionnaire_message")
+def get_questionnaire_message():
+    update_online_sheet()
+    if questionnaire_message_info == "" or questionnaire_message_info == None:
+        return None
+    else:
+        return json.loads(questionnaire_message_info)
 
 # Save questionnaire message
 
 
 def set_questionnaire_message(guild_id: int, channel_id: int, message_id: int):
-    state = _load_state()
-    state["questionnaire_message"] = {
-        "guild_id": guild_id,
-        "channel_id": channel_id,
-        "message_id": message_id,
-    }
-    _save_state(state)
+    serverdata = {"guild_id": guild_id,
+                  "channel_id": channel_id, "message_id": message_id}
+    set_cell_entry(5, 7, json.dumps(serverdata))
+    update_online_sheet()
 
 
-def get_questionnaire_info() -> List[List[Any]]:
-    state = _load_state()
-    return state.get("questionnaire_info", [["DLC", "Count", "Emoji"]])
+def get_questionnaire_info():
+    everything = dlc_sheet.get_all_values()
+    return everything
 
 
-def set_questionnaire_info(info: List[List[Any]]):
-    state = _load_state()
-    state["questionnaire_info"] = info
-    _save_state(state)
+def set_questionnaire_info(info):
+    dlc_sheet.update(info)
 
-# -----------------------------
-# Server status config in state
-# -----------------------------
+# Get the todays date
 
 
-def get_server_connection() -> Tuple[Optional[str], Optional[int]]:
-    state = _load_state()
-    ip = state.get("server_ip")
-    port = state.get("server_port")
-    try:
-        port_int = int(port) if port is not None else None
-    except Exception:
-        port_int = None
-    return ip, port_int
-
-
-def set_server_connection(ip: Optional[str], port: Optional[int]) -> None:
-    state = _load_state()
-    state["server_ip"] = ip
-    state["server_port"] = port
-    _save_state(state)
-
-
-def get_todays_date() -> datetime.date:
+def get_todays_date():
     today = datetime.date.today()
-    if today.weekday() == 6 and datetime.datetime.now().hour >= 16:
+    if (today.weekday() == 6 and datetime.datetime.now().hour >= 16):
         today = today + datetime.timedelta(days=1)
     return today
 
 # Get the date of the next sunday
 
 
-def get_next_sunday() -> datetime.date:
+def get_next_sunday():
     today = get_todays_date()
     next_sunday = today + datetime.timedelta(days=(6 - today.weekday()))
     return next_sunday
@@ -222,89 +223,65 @@ def get_next_sunday() -> datetime.date:
 # Get a list over the next n amount of Sundays
 
 
-def get_next_n_sundays(n: int = 5) -> List[str]:
+def get_next_n_sundays(n=5):
     next_sunday = get_next_sunday()
-    next_n_sundays: List[str] = []
+    next_n_sundays = []
     for i in range(n):
-        sunday_after = next_sunday + datetime.timedelta(days=i * 7)
+        sunday_after = next_sunday + datetime.timedelta(days=i*7)
         next_n_sundays.append(sunday_after.strftime("%b %d (%y)"))
     return next_n_sundays
 
 # Return schedule dates
 
 
-def _parse_event_author(event: Dict[str, Any]) -> str:
-    # Prefer explicit author if present; fallback: look in description
-    author = event.get("author") or ""
-    if not author:
-        desc = (event.get("description") or "").lower()
-        # naive parse "op made by <name>"
-        key = "op made by "
-        if key in desc:
-            try:
-                author = event.get("description", "")[
-                    len("Op made by "):].strip()
-            except Exception:
-                author = ""
-    return author or ""
+def get_schedule_dates():
+    update_local_sheet()
+    dates = [row[0] for row in entire_sheet]
+    names = [row[1] for row in entire_sheet]
+    authors = [row[2] for row in entire_sheet]
+    old_ops = [dates, names, authors]
+    next_sundays = get_next_n_sundays(date_amount)
+    ops = []
 
+    # Go through all the ops that have taken place and add them to the archive sheet
+    previous_sundays = [date for date in old_ops[0]
+                        if date not in next_sundays]
+    for old_sunday in previous_sundays:
+        if (old_sunday != "Date"):
+            index = old_ops[0].index(old_sunday)
+            old_name = old_ops[1][index]
+            old_author = old_ops[2][index]
+            archive_sheet.append_row(values=[old_sunday, old_name, old_author])
 
-def get_schedule_dates() -> List[List[str]]:
-    """Return three lists: dates, names, authors for the next N Sundays using API events."""
-    next_sundays = get_next_n_sundays(_get_date_amount())
+    # Go through all the ops that are coming up and add them to the schedule (And make sure they're ordered correctly)
+    for i in range(1, 11):
+        name = ''
+        author = ''
+        if (next_sundays[i-1] in old_ops[0]):
+            index = old_ops[0].index(next_sundays[i-1])
+            if index >= 0 and index < len(old_ops[1]):
+                name = old_ops[1][index]
+            if index >= 0 and index < len(old_ops[2]):
+                author = old_ops[2][index]
+        ops.append([next_sundays[i-1], name, author])
 
-    try:
-        # Build range from first to last wanted Sunday in UTC day span
-        first_dt = datetime.datetime.strptime(next_sundays[0], "%b %d (%y)").replace(
-            hour=0, minute=0, second=0, microsecond=0)
-        last_dt = datetime.datetime.strptime(
-            next_sundays[-1], "%b %d (%y)").replace(hour=23, minute=59, second=59, microsecond=0)
-        events = scarletpigsapi.get_events_between(first_dt, last_dt) or []
-    except Exception:
-        try:
-            events = scarletpigsapi.get_events() or []
-        except Exception:
-            events = []
+    # Update the online sheet with the new schedule
+    for i in range(0, 10):
+        set_cell_entry(i+2, 1, ops[i][0])
+        set_cell_entry(i+2, 2, ops[i][1])
+        set_cell_entry(i+2, 3, ops[i][2])
 
-    # Index events by yyyy-mm-dd for quick lookup
-    events_by_date: Dict[str, Dict[str, Any]] = {}
-    for ev in events:
-        try:
-            start_iso = ev.get("startTime") or ev.get("StartTime")
-            if not start_iso:
-                continue
-            start_dt = datetime.datetime.fromisoformat(
-                start_iso.replace("Z", "+00:00"))
-            key = start_dt.strftime("%Y-%m-%d")
-            events_by_date[key] = ev
-        except Exception:
-            continue
+    update_online_sheet()
 
-    ops: List[Tuple[str, str, str]] = []
-    for ds in next_sundays:
-        # parse ds back to date to key lookup
-        try:
-            dt = datetime.datetime.strptime(ds, "%b %d (%y)")
-        except Exception:
-            dt = None  # type: ignore
-        name = ""
-        author = ""
-        if dt is not None:
-            key = dt.strftime("%Y-%m-%d")
-            ev = events_by_date.get(key)
-            if ev:
-                name = ev.get("name") or ev.get("Name") or ""
-                author = _parse_event_author(ev)
-        ops.append((ds, name, author))
+    # Return the new schedule in a format that is more easily usable
+    dates = []
+    names = []
+    authors = []
+    for i in range(0, len(ops)):
 
-    # Return the new schedule in a more easily usable format
-    dates: List[str] = []
-    names: List[str] = []
-    authors: List[str] = []
-    for d, n, a in ops:
-        dates.append(d)
-        names.append(n)
-        authors.append(a)
+        dates.append(ops[i][0])
+        names.append(ops[i][1])
+        authors.append(ops[i][2])
 
     return [dates, names, authors]
 
@@ -315,65 +292,81 @@ def get_schedule_dates() -> List[List[str]]:
 #   update_op("Nov 06 (22)", opauthor = "OP Author") to update only author
 
 
-def update_op(datex: str, opname: Optional[str] = None, opauthor: Optional[str] = None):
-    # No-op: Event creation/update is handled via scarletpigsapi in the bot flows.
-    # Kept for backward compatibility.
+def update_op(datex, opname=None, opauthor=None):
+    for i in range(1, len(entire_sheet)):
+        if entire_sheet[i][0] == datex:
+            if opname != None:
+                entire_sheet[i][1] = opname
+            if opauthor != None:
+                entire_sheet[i][2] = opauthor
+            break
+    update_online_sheet()
     return None
 
 
-def delete_op(datex: str):
-    # No-op: Event deletion is handled via scarletpigsapi in the bot flows.
+def delete_op(datex):
+    for i in range(1, len(entire_sheet)):
+        if entire_sheet[i][0] == datex:
+            entire_sheet[i] = [datex, "", ""]
+            break
+    update_online_sheet()
     return None
 
 # Get data on specific op
 
 
-def get_op_data(date: Optional[str] = None, op: Optional[str] = None, author: Optional[str] = None):
-    schedule = get_full_schedule()
-    # schedule entries are [date, name, author]
-    if date is not None:
-        for entry in schedule:
-            if entry[0] == date:
-                return entry
-    elif op is not None:
-        for entry in schedule:
-            if entry[1] == op:
-                return entry
-    elif author is not None:
-        for entry in schedule:
-            if entry[2] == author:
-                return entry
-    return None
+def get_op_data(date=None, op=None, author=None):
+    datecolumn = [row[0] for row in entire_sheet]
+    opcolumn = [row[1] for row in entire_sheet]
+    authorcolumn = [row[2] for row in entire_sheet]
+
+    if (date != None):
+        for i in range(1, len(datecolumn)):
+            if datecolumn[i] == date:
+                return [datecolumn[i], opcolumn[i], authorcolumn[i]]
+    elif (op != None):
+        for i in range(1, len(opcolumn)):
+            if opcolumn[i] == op:
+                return [datecolumn[i], opcolumn[i], authorcolumn[i]]
+    elif (author != None):
+        for i in range(1, len(authorcolumn)):
+            if authorcolumn[i] == author:
+                return [datecolumn[i], opcolumn[i], authorcolumn[i]]
+    else:
+        return None
 
 # Returns a list of all op entries in the sheet
 
 
-def get_full_schedule() -> List[List[str]]:
+def get_full_schedule():
     full_schedule = get_schedule_dates()
-    entries: List[List[str]] = list(map(list, zip(*full_schedule)))
+    entries = []
+    entries = list(zip(*full_schedule))
+    # for i in range(0, len(full_schedule)):
+    #     entries.append([full_schedule[0][i], full_schedule[1][i], full_schedule[2][i]])
     return entries
 
 # Get the dates without an op
 
 
-def get_free_dates() -> List[List[str]]:
+def get_free_dates():
     full_schedule = get_full_schedule()
-    free_dates: List[List[str]] = []
+    free_dates = []
     for entry in full_schedule:
-        if entry[1] == "" or entry[1] is None:
+        if entry[1] == "" or entry[1] == None:
             free_dates.append([entry[0], entry[1], entry[2]])
     return free_dates
 
 # Get the dates with an op
 
 
-def get_booked_dates() -> List[List[str]]:
+def get_booked_dates():
     full_schedule = get_full_schedule()
-    booked_dates: List[List[str]] = []
+    booked_dates = []
     for entry in full_schedule:
-        if entry[1] != "" and entry[1] is not None:
+        if entry[1] != "" and entry[1] != None:
             booked_dates.append([entry[0], entry[1], entry[2]])
     return booked_dates
 
 
-print("Schedule system initialized (API + local state)")
+print("Sheets updated and setup")

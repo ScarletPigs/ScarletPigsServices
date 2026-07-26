@@ -30,13 +30,15 @@ builder.Services.AddScoped<IClaimsTransformation, KeycloakClaimsTransformation>(
 
 // Add HttpContextAccessor for accessing HttpContext in components.
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<AccessTokenForwardingHandler>();
 
 // Add HTTP client services.
 string apiurl = Environment.GetEnvironmentVariable("API_URL");
 builder.Services.AddHttpClient<IScarletPigsApi, ScarletPigsApi>(client =>
 {
     client.BaseAddress = new Uri(apiurl ?? "");
-});
+})
+.AddHttpMessageHandler<AccessTokenForwardingHandler>();
 builder.Services.AddHttpClient<ISteamworksApi, SteamworksApi>(client =>
 {
     client.BaseAddress = new Uri("https://api.steampowered.com/");

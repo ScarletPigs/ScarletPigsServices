@@ -3,6 +3,7 @@
 @using System.Text.RegularExpressions
 @using Microsoft.AspNetCore.Components.Forms
 @using MudBlazor
+@using ScarletPigsServices.Data.Files
 @using ScarletPigsServices.Website.Data.Models.Helpers
 @using ScarletPigsServices.Website.Data.Models.ModLists
 @using ScarletPigsServices.Website.Data.Services.HTTP
@@ -10,9 +11,13 @@
 
 @inject IJSRuntime JS
 @inject ISnackbar Snackbar
+@inject IScarletPigsApi Api
 
+<MudOverlay Visible="@_isBusy" DarkBackground="true" Class="fullscreen-overlay">
+    <MudProgressCircular Indeterminate="true" Size="Size.Large" Color="Color.Primary" />
+</MudOverlay>
 
-<MudContainer Style="margin-top: 50px; max-width: 800px; margin-left: auto; margin-right: auto;">
+<MudContainer Style="margin-top: 50px; margin-bottom: 50px; max-width: 800px; margin-left: auto; margin-right: auto;">
     <MudGrid Style="width: 100%;">
         <MudItem xs="12">
             <MudText Typo="Typo.h4" Align="Align.Center">Command Line Generator</MudText>
@@ -20,6 +25,7 @@
 
         <MudItem xs="12">
             <MudFileUpload T="IReadOnlyList<IBrowserFile>"
+                           Disabled="@_isBusy"
                            @ref="@_fileUpload"
                            OnFilesChanged="OnInputFileChanged"
                            AppendMultipleFiles="false"
@@ -67,10 +73,17 @@
             </MudItem>
         }
 
+        <MudItem xs="12">
+            <MudTextField Value="@ServerCommandLine"
+                          ReadOnly="true"
+                          Label="Default Serverside Command Line"
+                          Style="width: 100%;" />
+        </MudItem>
+
         @if (!string.IsNullOrEmpty(commandLine))
         {
-            <MudItem xs="12" sm="6" md="4">
-                <MudSelect T="Mod" Label="No DLCs" HelperText="Select DLCs here" @bind-SelectedValues="selectedDlcs" OnClose="OnDlcValueChanged"
+            <MudItem xs="12" sm="6" md="4" Style="margin-top:15px">
+                <MudSelect T="Mod" Label="Required DLCs" HelperText="Select DLCs here" @bind-SelectedValues="selectedDlcs" OnClose="OnDlcValueChanged"
                            ToStringFunc="@converter"
                            MultiSelection="true"
                            OpenIcon="@Icons.Material.Filled.Extension" AdornmentColor="Color.Primary">
@@ -88,8 +101,36 @@
             </MudItem>
             <MudItem xs="12" Style="margin-top: 10px; display: flex; justify-content: center;">
                 <MudButton OnClick="@CopyToClipboard" Color="Color.Primary" Variant="Variant.Filled">
-                    Copy
+                    Copy Command line
                 </MudButton>
+            </MudItem>
+        }
+
+        @if (!string.IsNullOrEmpty(missingServerModsText))
+        {
+            <MudItem xs="12">
+                <MudTextField @bind-Value="@missingServerModsText"
+                              Immediate="true"
+                              Label="Missing Server Mods!"
+                              Variant="Variant.Outlined"
+                              AutoGrow="true"
+                              Lines="3"
+                              MaxLines="6"
+                              Style="width: 100%;" />
+            </MudItem>
+        }
+
+        @if (!string.IsNullOrEmpty(missingHCModsText))
+        {
+            <MudItem xs="12">
+                <MudTextField @bind-Value="@missingHCModsText"
+                              Immediate="true"
+                              Label="Missing HC Mods!"
+                              Variant="Variant.Outlined"
+                              AutoGrow="true"
+                              Lines="3"
+                              MaxLines="6"
+                              Style="width: 100%;" />
             </MudItem>
         }
 
@@ -99,10 +140,16 @@
 
 @code {
     #nullable enable
+    private bool _isBusy;
     private const string DefaultDragClass = "relative rounded-lg border-2 border-dashed pa-4 mt-4 mud-width-full mud-height-full";
+    private const string ServerCommandLine = "@Advanced Towing;@Advanced Sling Loading;@ocap;";
     private string _dragClass = DefaultDragClass;
+    private IReadOnlyCollection<string> _installedServerMods = Array.Empty<string>();
+    private IReadOnlyCollection<string> _installedHeadlessMods = Array.Empty<string>();
     private string commandLine = string.Empty;
     private string modPackSize = string.Empty;
+    private string missingServerModsText = string.Empty;
+    private string missingHCModsText = string.Empty;
     private MudFileUpload<IReadOnlyList<IBrowserFile>>? _fileUpload;
 
     private ModList? currentModlist { get; set; }
@@ -124,8 +171,17 @@
     {
         try
         {
+            if (_isBusy)
+                return;
+
+            _isBusy = true;
+
             // Clear the command line
             commandLine = string.Empty;
+            missingServerModsText = string.Empty;
+            missingHCModsText = string.Empty;
+            _installedServerMods = Array.Empty<string>();
+            _installedHeadlessMods = Array.Empty<string>();
             StateHasChanged();
 
             var files = e.GetMultipleFiles();
@@ -138,7 +194,7 @@
             // Load the mod list
             ModList modList = await ModList.CreateModListFromFileAsync(files[0]);
 
-            UpdateCommandLine(modList);
+            await UpdateCommandLine(modList);
         }
         catch (Exception ex)
         {
@@ -149,6 +205,8 @@
         {
             // Clear the file upload
             await ClearAsync();
+            _isBusy = false;
+            StateHasChanged();
         }
     }
 
@@ -200,12 +258,21 @@
         return modIds;
     }
 
-    private async void GenerateCommandlineFromText()
+    private async Task GenerateCommandlineFromText()
     {
         try
         {
+            if (_isBusy)
+                return;
+
+            _isBusy = true;
+
             // Clear the command line
             commandLine = string.Empty;
+            missingServerModsText = string.Empty;
+            missingHCModsText = string.Empty;
+            _installedServerMods = Array.Empty<string>();
+            _installedHeadlessMods = Array.Empty<string>();
             StateHasChanged();
 
             List<string> modIds = GetModIdsFromString(customIdText);
@@ -240,30 +307,84 @@
                 return;
             }
 
-            UpdateCommandLine(modList);
+            await UpdateCommandLine(modList);
         }
         catch (Exception ex)
         {
             Snackbar.Add($"Failed to generate command line: {ex.Message}", Severity.Error);
         }
+        finally
+        {
+            _isBusy = false;
+            StateHasChanged();
+        }
     }
 
-    private void UpdateCommandLine(ModList newModlist)
+    private async Task UpdateCommandLine(ModList newModlist)
     {
         currentModlist = newModlist;
         commandLine = newModlist.GetCommandLine();
         selectedDlcs = newModlist.Dlcs;
 
         long totalSize = newModlist.GetTotalSizeInBytes();
-        if (totalSize > 0)
-            modPackSize = $" ({FileSizeFormatterUtil.ReadableSizeFromBytes(totalSize)})";
-        else
-            modPackSize = string.Empty;
+        modPackSize = totalSize > 0
+            ? $" ({FileSizeFormatterUtil.ReadableSizeFromBytes(totalSize)})"
+            : string.Empty;
+
+        try
+        {
+            using var cancellationTokenSource = new CancellationTokenSource(TimeSpan.FromSeconds(120));
+            var serverFoldersResponse = await Api.GetHavocFoldersAsync(cancellationToken: cancellationTokenSource.Token);
+            if (serverFoldersResponse?.IsConfigured != true)
+            {
+                throw new InvalidOperationException("The server FTP target is not configured.");
+            }
+
+            _installedServerMods = serverFoldersResponse.Folders;
+            missingServerModsText = GetMissingModsText(newModlist, _installedServerMods, "server");
+
+            var headlessFoldersResponse = await Api.GetHavocFoldersAsync("headless", cancellationTokenSource.Token);
+            if (headlessFoldersResponse?.IsConfigured == true)
+            {
+                _installedHeadlessMods = headlessFoldersResponse.Folders;
+                missingHCModsText = GetMissingModsText(newModlist, _installedHeadlessMods, "HC");
+            }
+            else
+            {
+                _installedHeadlessMods = Array.Empty<string>();
+                missingHCModsText = string.Empty;
+            }
+        }
+        catch (Exception ex)
+        {
+            _installedServerMods = Array.Empty<string>();
+            missingServerModsText = "Unknown";
+            Snackbar.Add($"Failed to compare installed server mods: {ex.Message}", Severity.Warning);
+        }
 
         Snackbar.Add("Command line created!", Severity.Success);
 
         // Ensure the UI updates
         StateHasChanged();
+    }
+
+    private string GetMissingModsText(ModList modList, IReadOnlyCollection<string> installedMods, string label)
+    {
+        var installedSet = installedMods
+            .Where(mod => !string.IsNullOrWhiteSpace(mod))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var missing = modList.Mods
+            .Where(mod => !mod.IsDlc() && !installedSet.Contains(mod.GetCommandLineName()))
+            .Select(mod => mod.GetCommandLineName())
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .ToList();
+
+        if (missing.Count == 0)
+            return string.Empty;
+
+        Snackbar.Add($"Missing mods on {label}!", Severity.Warning);
+        return string.Join(", ", missing);
     }
 
     private async Task CopyToClipboard()
@@ -287,6 +408,16 @@
         bool dlcChanged = currentModlist.UpdateDlcs(selectedDlcs.ToHashSet());
         if(dlcChanged)
             commandLine = currentModlist.GetCommandLine();
+
+        if (_installedServerMods.Count > 0)
+        {
+            missingServerModsText = GetMissingModsText(currentModlist, _installedServerMods, "server");
+        }
+
+        if (_installedHeadlessMods.Count > 0)
+        {
+            missingHCModsText = GetMissingModsText(currentModlist, _installedHeadlessMods, "HC");
+        }
 
         // Ensure the UI updates
         StateHasChanged();

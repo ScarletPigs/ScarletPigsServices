@@ -1,0 +1,160 @@
+name: Deploy to Dokploy
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.repository }}-dokploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy production
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 45
+
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: 1
+      DOTNET_NOLOGO: 1
+
+      # Dokploy and container registry
+      Parameters__scarletpigs-api-url: ${{ secrets.DOKPLOY_API_URL }}
+      Parameters__scarletpigs-api-key: ${{ secrets.DOKPLOY_API_KEY }}
+      Parameters__scarletpigs-registry-url: ${{ secrets.DOKPLOY_REGISTRY_URL }}
+      Parameters__scarletpigs-registry-username: ${{ secrets.DOKPLOY_REGISTRY_USERNAME }}
+      Parameters__scarletpigs-registry-password: ${{ secrets.DOKPLOY_REGISTRY_PASSWORD }}
+      Parameters__dbserver-password: ${{ secrets.DBSERVER_PASSWORD }}
+
+      # Piglet, API, FTP, JWT, and Google service account configuration
+      DISCORDTOKEN: ${{ secrets.DISCORDTOKEN }}
+      DISCORDCLIENTID: ${{ secrets.DISCORDCLIENTID }}
+      DISCORDCLIENTSECRET: ${{ secrets.DISCORDCLIENTSECRET }}
+      HAVOC_SERVER_FTP_HOST: ${{ secrets.HAVOC_SERVER_FTP_HOST }}
+      HAVOC_SERVER_FTP_PORT: ${{ secrets.HAVOC_SERVER_FTP_PORT }}
+      HAVOC_FTP_USER: ${{ secrets.HAVOC_FTP_USER }}
+      HAVOC_FTP_PASSWORD: ${{ secrets.HAVOC_FTP_PASSWORD }}
+      HAVOC_SERVER_FTP_ROOT: ${{ secrets.HAVOC_SERVER_FTP_ROOT }}
+      HAVOC_HEADLESS_FTP_HOST: ${{ secrets.HAVOC_HEADLESS_FTP_HOST }}
+      HAVOC_HEADLESS_FTP_PORT: ${{ secrets.HAVOC_HEADLESS_FTP_PORT }}
+      HAVOC_HEADLESS_FTP_USER: ${{ secrets.HAVOC_HEADLESS_FTP_USER }}
+      HAVOC_HEADLESS_FTP_PASSWORD: ${{ secrets.HAVOC_HEADLESS_FTP_PASSWORD }}
+      HAVOC_HEADLESS_FTP_ROOT: ${{ secrets.HAVOC_HEADLESS_FTP_ROOT }}
+      CREATORID: ${{ secrets.CREATORID }}
+      GITHUBTOKEN: ${{ secrets.GITHUBTOKEN }}
+      SERVER_IP: ${{ secrets.SERVER_IP }}
+      SERVER_PORT: ${{ secrets.SERVER_PORT }}
+      JWT_SIGNING_KEY: ${{ secrets.JWT_SIGNING_KEY }}
+      GOOGLE_SHEET_NAME: ${{ secrets.GOOGLE_SHEET_NAME }}
+      TYPE: ${{ secrets.TYPE }}
+      PROJECT_ID: ${{ secrets.PROJECT_ID }}
+      PRIVATE_KEY_ID: ${{ secrets.PRIVATE_KEY_ID }}
+      PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+      CLIENT_EMAIL: ${{ secrets.CLIENT_EMAIL }}
+      CLIENT_ID: ${{ secrets.CLIENT_ID }}
+      AUTH_URI: ${{ secrets.AUTH_URI }}
+      TOKEN_URI: ${{ secrets.TOKEN_URI }}
+      AUTH_PROVIDER_X509_CERT_URL: ${{ secrets.AUTH_PROVIDER_X509_CERT_URL }}
+      CLIENT_X509_CERT_URL: ${{ secrets.CLIENT_X509_CERT_URL }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install Aspire CLI
+        shell: bash
+        run: |
+          aspire_version="$(
+            sed -n 's#.*Aspire.AppHost.Sdk/\([^"]*\).*#\1#p' \
+              Aspire/ScarletPigsServices.AppHost/ScarletPigsServices.AppHost.csproj
+          )"
+
+          if [[ -z "$aspire_version" ]]; then
+            echo "::error::Could not determine the Aspire CLI version from the AppHost project."
+            exit 1
+          fi
+
+          curl -fsSL https://aspire.dev/install.sh |
+            bash -s -- \
+              --version "$aspire_version" \
+              --install-path "$RUNNER_TEMP/aspire" \
+              --skip-path
+
+          echo "$RUNNER_TEMP/aspire" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/aspire/aspire" --version
+
+      - name: Validate deployment secrets
+        shell: bash
+        run: |
+          required=(
+            Parameters__scarletpigs-api-url
+            Parameters__scarletpigs-api-key
+            Parameters__scarletpigs-registry-url
+            Parameters__scarletpigs-registry-username
+            Parameters__scarletpigs-registry-password
+            Parameters__dbserver-password
+            DISCORDTOKEN
+            DISCORDCLIENTID
+            DISCORDCLIENTSECRET
+            HAVOC_SERVER_FTP_HOST
+            HAVOC_SERVER_FTP_PORT
+            HAVOC_FTP_USER
+            HAVOC_FTP_PASSWORD
+            HAVOC_SERVER_FTP_ROOT
+            HAVOC_HEADLESS_FTP_HOST
+            HAVOC_HEADLESS_FTP_PORT
+            HAVOC_HEADLESS_FTP_USER
+            HAVOC_HEADLESS_FTP_PASSWORD
+            HAVOC_HEADLESS_FTP_ROOT
+            CREATORID
+            GITHUBTOKEN
+            SERVER_IP
+            SERVER_PORT
+            JWT_SIGNING_KEY
+            GOOGLE_SHEET_NAME
+            TYPE
+            PROJECT_ID
+            PRIVATE_KEY_ID
+            PRIVATE_KEY
+            CLIENT_EMAIL
+            CLIENT_ID
+            AUTH_URI
+            TOKEN_URI
+            AUTH_PROVIDER_X509_CERT_URL
+            CLIENT_X509_CERT_URL
+          )
+
+          missing=()
+          for name in "${required[@]}"; do
+            if [[ -z "$(printenv "$name" 2>/dev/null)" ]]; then
+              missing+=("$name")
+            fi
+          done
+
+          if (( ${#missing[@]} > 0 )); then
+            printf '::error::Missing production deployment value: %s\n' "${missing[@]}"
+            exit 1
+          fi
+
+      - name: Restore dependencies
+        run: >
+          dotnet restore
+          Aspire/ScarletPigsServices.AppHost/ScarletPigsServices.AppHost.csproj
+
+      - name: Deploy to Dokploy
+        run: >
+          aspire deploy
+          --apphost Aspire/ScarletPigsServices.AppHost/ScarletPigsServices.AppHost.csproj
+          --environment Production
+          --non-interactive
+          --nologo

@@ -1,0 +1,8 @@
+.vscode
+ScarletPiglet.code-workspace
+.env
+__pycache__
+files
+schedule_messages.json
+reactions.xlsx
+*.log

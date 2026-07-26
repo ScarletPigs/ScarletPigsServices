@@ -51,6 +51,26 @@ internal static class DokployResponseReaders
         return TryExtractApplication(json.RootElement);
     }
 
+    internal static async Task<List<DokployServiceTask>> ReadServiceTasksFromResponseAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var json = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+        var tasks = new List<DokployServiceTask>();
+        CollectServiceTasks(json.RootElement, tasks);
+
+        return tasks
+            .Where(task => !string.IsNullOrWhiteSpace(task.Id))
+            .DistinctBy(task => task.Id, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    internal static async Task<string?> ReadDockerImageFromResponseAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var json = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+        return FindDockerImage(json.RootElement);
+    }
+
     internal static async Task<List<DokployMount>> ReadMountsFromResponseAsync(HttpResponseMessage response, ILogger? logger = null, string source = "mounts.allNamedByApplicationId")
     {
         var content = DokployJsonPayload.Normalize(await response.Content.ReadAsStringAsync());
@@ -455,5 +475,78 @@ internal static class DokployResponseReaders
                 CollectMounts(item, output);
             }
         }
+    }
+
+    private static void CollectServiceTasks(JsonElement value, List<DokployServiceTask> output)
+    {
+        if (value.ValueKind == JsonValueKind.Object
+            && value.TryGetProperty("containerId", out var containerId)
+            && containerId.ValueKind == JsonValueKind.String)
+        {
+            var task = value.Deserialize<DokployServiceTask>(DokployApiClient.JsonOptions);
+            if (task is not null)
+            {
+                output.Add(task);
+            }
+        }
+
+        if (value.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var property in value.EnumerateObject())
+            {
+                CollectServiceTasks(property.Value, output);
+            }
+        }
+        else if (value.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in value.EnumerateArray())
+            {
+                CollectServiceTasks(item, output);
+            }
+        }
+    }
+
+    private static string? FindDockerImage(JsonElement value)
+    {
+        if (value.ValueKind == JsonValueKind.Object)
+        {
+            if (value.TryGetProperty("ContainerSpec", out var containerSpec)
+                && containerSpec.ValueKind == JsonValueKind.Object
+                && containerSpec.TryGetProperty("Image", out var taskImage)
+                && taskImage.ValueKind == JsonValueKind.String)
+            {
+                return taskImage.GetString();
+            }
+
+            if (value.TryGetProperty("Config", out var config)
+                && config.ValueKind == JsonValueKind.Object
+                && config.TryGetProperty("Image", out var containerImage)
+                && containerImage.ValueKind == JsonValueKind.String)
+            {
+                return containerImage.GetString();
+            }
+
+            foreach (var property in value.EnumerateObject())
+            {
+                var image = FindDockerImage(property.Value);
+                if (!string.IsNullOrWhiteSpace(image))
+                {
+                    return image;
+                }
+            }
+        }
+        else if (value.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in value.EnumerateArray())
+            {
+                var image = FindDockerImage(item);
+                if (!string.IsNullOrWhiteSpace(image))
+                {
+                    return image;
+                }
+            }
+        }
+
+        return null;
     }
 }

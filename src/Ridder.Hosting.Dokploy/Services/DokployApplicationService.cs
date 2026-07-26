@@ -10,6 +10,9 @@ namespace Ridder.Hosting.Dokploy.Services;
 
 internal sealed class DokployApplicationService
 {
+    private static readonly TimeSpan DeploymentVerificationTimeout = TimeSpan.FromMinutes(2);
+    private static readonly TimeSpan DeploymentVerificationInterval = TimeSpan.FromSeconds(2);
+
     private readonly DokployApiClient _client;
     private readonly DokployProjectService _projectService;
 
@@ -121,21 +124,7 @@ internal sealed class DokployApplicationService
 
         var registryUrl = _client.RegistrySettings.RegistryUrl;
 
-        string? dockerImage = null;
-
-        if (HasDockerfileBuildAnnotation(rsc) || rsc is ProjectResource)
-        {
-            var imageRef = new ContainerImageReference(rsc);
-            dockerImage = await ((IValueProvider)imageRef).GetValueAsync();
-        }
-        else if (rsc.TryGetContainerImageName(out var imageName))
-        {
-            dockerImage = imageName;
-        }
-        else
-        {
-            throw new InvalidOperationException($"Compute resource '{rsc.Name}' does not have Docker image information in annotations or properties.");
-        }
+        var dockerImage = await ResolveDockerImageAsync(rsc, cancellationToken);
 
         var saveDockerProviderBody = JsonSerializer.Serialize(new
         {
@@ -166,12 +155,19 @@ internal sealed class DokployApplicationService
         }
     }
 
-    internal async Task DeployApplicationAsync(DokployApplication application, IComputeResource rsc)
+    internal async Task<HashSet<string>> DeployApplicationAsync(
+        DokployApplication application,
+        IComputeResource rsc,
+        CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(application.Id))
         {
             throw new InvalidOperationException($"Application '{rsc.Name}' has no applicationId, so deployment cannot be triggered.");
         }
+
+        var existingTaskIds = (await GetServiceTasksAsync(application, cancellationToken))
+            .Select(task => task.Id)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var deployBody = JsonSerializer.Serialize(new
         {
@@ -180,15 +176,142 @@ internal sealed class DokployApplicationService
             description = $"Automated deploy for resource '{rsc.Name}' in project '{_client.Env.ApplicationName}'."
         }, DokployApiClient.JsonOptions);
 
-        using var deployResponse = await _client.Http.PostAsync("api/application.deploy", DokployApiClient.CreateJsonContent(deployBody));
+        using var deployResponse = await _client.Http.PostAsync(
+            "api/application.deploy",
+            DokployApiClient.CreateJsonContent(deployBody),
+            cancellationToken);
         deployResponse.EnsureSuccessStatusCode();
         _client.Logger.LogInformation("Triggered application deploy for {AppName}.", rsc.Name);
+        return existingTaskIds;
+    }
+
+    internal async Task VerifyApplicationDeploymentAsync(
+        DokployApplication application,
+        IComputeResource resource,
+        IReadOnlySet<string> existingTaskIds,
+        CancellationToken cancellationToken)
+    {
+        var expectedImage = await ResolveDockerImageAsync(resource, cancellationToken);
+        var appName = GetDokployApplicationName(application, resource);
+        var deadline = DateTimeOffset.UtcNow + DeploymentVerificationTimeout;
+        var observedImages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var tasks = await GetServiceTasksAsync(application, cancellationToken);
+
+            foreach (var task in tasks.Where(task => !existingTaskIds.Contains(task.Id)))
+            {
+                var image = await GetServiceTaskImageAsync(task.Id, cancellationToken);
+                if (string.IsNullOrWhiteSpace(image))
+                {
+                    continue;
+                }
+
+                observedImages.Add(image);
+                if (ImageReferencesMatch(image, expectedImage))
+                {
+                    _client.Logger.LogInformation(
+                        "Verified Dokploy rollout for {AppName}: new service task {TaskId} uses {Image}.",
+                        resource.Name,
+                        task.Id,
+                        expectedImage);
+                    return;
+                }
+            }
+
+            await Task.Delay(DeploymentVerificationInterval, cancellationToken);
+        }
+
+        var observed = observedImages.Count == 0
+            ? "no new service task images"
+            : string.Join(", ", observedImages.Order(StringComparer.OrdinalIgnoreCase));
+        throw new InvalidOperationException(
+            $"Dokploy accepted the deployment for '{appName}', but no new service task used expected image '{expectedImage}' within {DeploymentVerificationTimeout.TotalMinutes:0} minutes. Observed {observed}.");
     }
 
     private static bool HasDockerfileBuildAnnotation(IResource resource)
     {
         return resource.Annotations.Any(annotation =>
             string.Equals(annotation.GetType().Name, "DockerfileBuildAnnotation", StringComparison.Ordinal));
+    }
+
+    private static async Task<string> ResolveDockerImageAsync(IComputeResource resource, CancellationToken cancellationToken)
+    {
+        if (HasDockerfileBuildAnnotation(resource) || resource is ProjectResource)
+        {
+            var imageReference = new ContainerImageReference(resource);
+            var value = await ((IValueProvider)imageReference).GetValueAsync(cancellationToken);
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value;
+            }
+        }
+        else if (resource.TryGetContainerImageName(out var imageName) && !string.IsNullOrWhiteSpace(imageName))
+        {
+            return imageName;
+        }
+
+        throw new InvalidOperationException($"Compute resource '{resource.Name}' does not have Docker image information in annotations or properties.");
+    }
+
+    private async Task<List<DokployServiceTask>> GetServiceTasksAsync(
+        DokployApplication application,
+        CancellationToken cancellationToken)
+    {
+        var appName = GetDokployApplicationName(application);
+        using var response = await _client.Http.GetAsync(
+            $"api/docker.getServiceContainersByAppName?appName={Uri.EscapeDataString(appName)}",
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await DokployResponseReaders.ReadServiceTasksFromResponseAsync(response, cancellationToken);
+    }
+
+    private async Task<string?> GetServiceTaskImageAsync(string taskId, CancellationToken cancellationToken)
+    {
+        using var response = await _client.Http.GetAsync(
+            $"api/docker.getConfig?containerId={Uri.EscapeDataString(taskId)}",
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await DokployResponseReaders.ReadDockerImageFromResponseAsync(response, cancellationToken);
+    }
+
+    private static string GetDokployApplicationName(DokployApplication application, IComputeResource? resource = null)
+    {
+        var appName = string.IsNullOrWhiteSpace(application.AppName) ? application.Name : application.AppName;
+        if (!string.IsNullOrWhiteSpace(appName))
+        {
+            return appName;
+        }
+
+        throw new InvalidOperationException($"Application '{resource?.Name ?? "unknown"}' has no Dokploy service name.");
+    }
+
+    internal static bool ImageReferencesMatch(string actual, string expected)
+    {
+        static string Normalize(string image)
+        {
+            var normalized = image.Trim();
+            var digestIndex = normalized.IndexOf('@');
+            if (digestIndex >= 0)
+            {
+                normalized = normalized[..digestIndex];
+            }
+
+            foreach (var prefix in new[] { "docker.io/", "index.docker.io/", "registry-1.docker.io/" })
+            {
+                if (normalized.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    normalized = normalized[prefix.Length..];
+                    break;
+                }
+            }
+
+            return normalized;
+        }
+
+        return string.Equals(Normalize(actual), Normalize(expected), StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task SaveApplicationEnvironmentAsync(

@@ -85,7 +85,7 @@ var migrations = apiService
         targetRuntime: "linux-x64",
         publishContainer: true,
         baseImage: "mcr.microsoft.com/dotnet/aspnet:10.0")
-    .PublishToDokploy(dokploy);
+    .PublishToDokploy(dokploy, options => options.RunOnce = true);
 
 apiService.WaitFor(migrations);
 

@@ -154,6 +154,43 @@ internal sealed class DokployApplicationService
         {
             await EnsureApplicationDomainAsync(application, rsc);
         }
+
+        if (publishAnnotation?.Options.RunOnce == true)
+        {
+            await ConfigureRunOncePolicyAsync(application, rsc, cancellationToken);
+        }
+    }
+
+    private async Task ConfigureRunOncePolicyAsync(
+        DokployApplication application,
+        IComputeResource resource,
+        CancellationToken cancellationToken)
+    {
+        var body = JsonSerializer.Serialize(new
+        {
+            applicationId = application.Id,
+            restartPolicySwarm = new
+            {
+                Condition = "none"
+            },
+            updateConfigSwarm = new
+            {
+                Parallelism = 1,
+                FailureAction = "pause",
+                Monitor = 5_000_000_000L,
+                MaxFailureRatio = 0,
+                Order = "stop-first"
+            }
+        }, DokployApiClient.JsonOptions);
+
+        using var response = await _client.Http.PostAsync(
+            "api/application.update",
+            DokployApiClient.CreateJsonContent(body),
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+        _client.Logger.LogInformation(
+            "Configured application {AppName} to run once without Swarm restarts or automatic rollback.",
+            resource.Name);
     }
 
     internal async Task<HashSet<string>> DeployApplicationAsync(

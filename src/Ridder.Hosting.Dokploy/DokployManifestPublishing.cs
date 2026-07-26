@@ -62,6 +62,7 @@ internal static class DokployManifestPublishing
         writer.WriteBoolean("configureEnvironmentVariables", annotation.Options.ConfigureEnvironmentVariables);
         writer.WriteBoolean("configureMounts", annotation.Options.ConfigureMounts);
         writer.WriteBoolean("createDomainsForExternalEndpoints", annotation.Options.CreateDomainsForExternalEndpoints);
+        writer.WriteBoolean("runOnce", annotation.Options.RunOnce);
 
         writer.WriteStartArray("externalEndpoints");
         foreach (var endpoint in resource.ResolveEndpoints().Where(endpoint => endpoint.Endpoint?.IsExternal == true))

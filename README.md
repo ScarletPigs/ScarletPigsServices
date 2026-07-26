@@ -22,10 +22,13 @@ deployment, Aspire prompts for:
 - any application parameters and secrets that have not already been configured.
 
 Resources published with `PublishToDokploy` use the readable `latest` image tag
-by default. The deploy pipeline asks Dokploy to pull that tag, then waits for a
-new Docker Swarm task and verifies that its service specification references
-the image Aspire just published. A stale rollout therefore fails the pipeline
-instead of being reported as successfully deployed.
+by default. After pushing, the integration resolves that tag to its immutable
+registry digest and gives Dokploy the combined `image:latest@sha256:...`
+reference. This keeps the readable alias while preventing Docker Swarm from
+reusing stale bytes cached under a mutable tag. The pipeline then waits for a
+new Swarm task and verifies that its service specification references that
+exact digest. A stale rollout therefore fails the pipeline instead of being
+reported as successfully deployed.
 
 The [Dokploy deployment workflow](.github/workflows/deploy.yml) runs on every
 push to `main`. Create a GitHub environment named `production` and populate the

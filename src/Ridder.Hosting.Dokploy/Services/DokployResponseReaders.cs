@@ -66,8 +66,16 @@ internal static class DokployResponseReaders
 
     internal static async Task<string?> ReadDockerImageFromResponseAsync(HttpResponseMessage response, CancellationToken cancellationToken)
     {
-        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        using var json = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+        var content = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            // A completed or replaced Swarm task can disappear between the service
+            // task listing and docker.getConfig. Dokploy returns an empty 200 in
+            // that race, so let the rollout verifier continue polling.
+            return null;
+        }
+
+        using var json = JsonDocument.Parse(content);
         return FindDockerImage(json.RootElement);
     }
 

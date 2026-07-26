@@ -12,6 +12,7 @@ internal sealed class DokployApplicationService
 {
     private static readonly TimeSpan DeploymentVerificationTimeout = TimeSpan.FromMinutes(2);
     private static readonly TimeSpan DeploymentVerificationInterval = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan DeploymentStabilityPeriod = TimeSpan.FromSeconds(10);
 
     private readonly DokployApiClient _client;
     private readonly DokployProjectService _projectService;
@@ -195,6 +196,8 @@ internal sealed class DokployApplicationService
         var appName = GetDokployApplicationName(application, resource);
         var deadline = DateTimeOffset.UtcNow + DeploymentVerificationTimeout;
         var observedImages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var observedFailures = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var runningSinceByTask = new Dictionary<string, DateTimeOffset>(StringComparer.OrdinalIgnoreCase);
 
         while (DateTimeOffset.UtcNow < deadline)
         {
@@ -210,15 +213,56 @@ internal sealed class DokployApplicationService
                 }
 
                 observedImages.Add(image);
-                if (ImageReferencesMatch(image, expectedImage))
+                if (!ImageReferencesMatch(image, expectedImage))
+                {
+                    continue;
+                }
+
+                if (!string.IsNullOrWhiteSpace(task.Error))
+                {
+                    observedFailures.Add($"{task.Id}: {task.Error}");
+                    runningSinceByTask.Remove(task.Id);
+                    continue;
+                }
+
+                if (task.CurrentState.StartsWith("Complete ", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(task.CurrentState, "Complete", StringComparison.OrdinalIgnoreCase))
                 {
                     _client.Logger.LogInformation(
-                        "Verified Dokploy rollout for {AppName}: new service task {TaskId} uses {Image}.",
+                        "Verified Dokploy rollout for {AppName}: new one-shot service task {TaskId} completed using {Image}.",
                         resource.Name,
                         task.Id,
                         expectedImage);
                     return;
                 }
+
+                var isRunning = string.Equals(task.State, "running", StringComparison.OrdinalIgnoreCase)
+                    && (task.CurrentState.StartsWith("Running ", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(task.CurrentState, "Running", StringComparison.OrdinalIgnoreCase));
+                if (!isRunning)
+                {
+                    runningSinceByTask.Remove(task.Id);
+                    continue;
+                }
+
+                if (!runningSinceByTask.TryGetValue(task.Id, out var runningSince))
+                {
+                    runningSinceByTask[task.Id] = DateTimeOffset.UtcNow;
+                    continue;
+                }
+
+                if (DateTimeOffset.UtcNow - runningSince < DeploymentStabilityPeriod)
+                {
+                    continue;
+                }
+
+                _client.Logger.LogInformation(
+                    "Verified Dokploy rollout for {AppName}: new service task {TaskId} remained running with {Image} for {StabilitySeconds} seconds.",
+                    resource.Name,
+                    task.Id,
+                    expectedImage,
+                    DeploymentStabilityPeriod.TotalSeconds);
+                return;
             }
 
             await Task.Delay(DeploymentVerificationInterval, cancellationToken);
@@ -227,8 +271,11 @@ internal sealed class DokployApplicationService
         var observed = observedImages.Count == 0
             ? "no new service task images"
             : string.Join(", ", observedImages.Order(StringComparer.OrdinalIgnoreCase));
+        var failures = observedFailures.Count == 0
+            ? string.Empty
+            : $" Task failures: {string.Join("; ", observedFailures.Order(StringComparer.OrdinalIgnoreCase))}.";
         throw new InvalidOperationException(
-            $"Dokploy accepted the deployment for '{appName}', but no new service task used expected image '{expectedImage}' within {DeploymentVerificationTimeout.TotalMinutes:0} minutes. Observed {observed}.");
+            $"Dokploy accepted the deployment for '{appName}', but no new service task using expected image '{expectedImage}' remained healthy within {DeploymentVerificationTimeout.TotalMinutes:0} minutes. Observed {observed}.{failures}");
     }
 
     private static bool HasDockerfileBuildAnnotation(IResource resource)
@@ -718,8 +765,7 @@ internal sealed class DokployApplicationService
     {
         var normalized = value
             .Replace("\r\n", "\n", StringComparison.Ordinal)
-            .Replace("\r", "\n", StringComparison.Ordinal)
-            .Replace("\n", "\\n", StringComparison.Ordinal);
+            .Replace("\r", "\n", StringComparison.Ordinal);
 
         if (normalized.Length == 0)
         {
@@ -736,7 +782,15 @@ internal sealed class DokployApplicationService
             return normalized;
         }
 
-        return $"\"{normalized.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal)}\"";
+        // Dokploy parses this payload with dotenv. Escape existing backslashes first,
+        // then encode real newlines so dotenv restores them instead of leaving a
+        // stray backslash before each newline.
+        var encoded = normalized
+            .Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("\"", "\\\"", StringComparison.Ordinal)
+            .Replace("\n", "\\n", StringComparison.Ordinal);
+
+        return $"\"{encoded}\"";
     }
 
     private async Task EnsureApplicationDomainAsync(DokployApplication application, IComputeResource resource)

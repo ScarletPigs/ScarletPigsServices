@@ -33,6 +33,10 @@ therefore fails the pipeline instead of being reported as successfully
 deployed. Multiline environment values are encoded for Dokploy's dotenv parser,
 including PEM private keys.
 
+Migration bundles are marked as run-once Dokploy applications. The integration
+uses a no-restart, stop-first Swarm policy so a successful bundle can complete
+without being restarted or rolled back as though it were a long-running service.
+
 The [Dokploy deployment workflow](.github/workflows/deploy.yml) runs on every
 push to `main`. Create a GitHub environment named `production` and populate the
 environment secrets referenced by the workflow. The workflow validates every

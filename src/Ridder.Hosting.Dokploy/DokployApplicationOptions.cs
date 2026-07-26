@@ -28,11 +28,17 @@ public sealed class DokployApplicationOptions
     /// </summary>
     public bool CreateDomainsForExternalEndpoints { get; set; } = true;
 
+    /// <summary>
+    /// Gets or sets a value indicating whether the resource should run to completion once instead of restarting continuously.
+    /// </summary>
+    public bool RunOnce { get; set; }
+
     internal DokployApplicationOptions Clone() => new()
     {
         ApplicationName = ApplicationName,
         ConfigureEnvironmentVariables = ConfigureEnvironmentVariables,
         ConfigureMounts = ConfigureMounts,
-        CreateDomainsForExternalEndpoints = CreateDomainsForExternalEndpoints
+        CreateDomainsForExternalEndpoints = CreateDomainsForExternalEndpoints,
+        RunOnce = RunOnce
     };
 }

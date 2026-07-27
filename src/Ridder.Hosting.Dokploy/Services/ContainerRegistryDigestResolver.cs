@@ -20,12 +20,22 @@ internal static partial class ContainerRegistryDigestResolver
         DokployResolvedRegistrySettings registrySettings,
         CancellationToken cancellationToken)
     {
-        var reference = Parse(imageReference, registrySettings.RegistryUrl);
         using var client = new HttpClient
         {
             Timeout = TimeSpan.FromSeconds(30)
         };
 
+        return await ResolveAsync(imageReference, registrySettings, client, cancellationToken);
+    }
+
+    internal static async Task<string> ResolveAsync(
+        string imageReference,
+        DokployResolvedRegistrySettings registrySettings,
+        HttpClient client,
+        CancellationToken cancellationToken)
+    {
+        var reference = Parse(imageReference, registrySettings.RegistryUrl);
+        var credentials = ResolveCredentials(reference.RegistryApiBase, registrySettings);
         var manifestUri = new Uri(
             reference.RegistryApiBase,
             $"v2/{reference.Repository}/manifests/{Uri.EscapeDataString(reference.Tag)}");
@@ -33,8 +43,8 @@ internal static partial class ContainerRegistryDigestResolver
         using var initialResponse = await SendManifestRequestAsync(
             client,
             manifestUri,
-            registrySettings.Username,
-            registrySettings.Password,
+            credentials.Username,
+            credentials.Password,
             bearerToken: null,
             HttpMethod.Head,
             cancellationToken);
@@ -46,7 +56,7 @@ internal static partial class ContainerRegistryDigestResolver
                 initialResponse,
                 manifestUri,
                 reference.ImageWithoutDigest,
-                registrySettings,
+                credentials,
                 bearerToken: null,
                 cancellationToken);
         }
@@ -62,14 +72,14 @@ internal static partial class ContainerRegistryDigestResolver
             client,
             challenge!,
             reference.Repository,
-            registrySettings,
+            credentials,
             cancellationToken);
 
         using var authenticatedResponse = await SendManifestRequestAsync(
             client,
             manifestUri,
-            registrySettings.Username,
-            registrySettings.Password,
+            credentials.Username,
+            credentials.Password,
             bearerToken,
             HttpMethod.Head,
             cancellationToken);
@@ -79,7 +89,7 @@ internal static partial class ContainerRegistryDigestResolver
             authenticatedResponse,
             manifestUri,
             reference.ImageWithoutDigest,
-            registrySettings,
+            credentials,
             bearerToken,
             cancellationToken);
     }
@@ -89,7 +99,7 @@ internal static partial class ContainerRegistryDigestResolver
         HttpResponseMessage response,
         Uri manifestUri,
         string imageWithoutDigest,
-        DokployResolvedRegistrySettings registrySettings,
+        RegistryCredentials credentials,
         string? bearerToken,
         CancellationToken cancellationToken)
     {
@@ -106,8 +116,8 @@ internal static partial class ContainerRegistryDigestResolver
         using var getResponse = await SendManifestRequestAsync(
             client,
             manifestUri,
-            registrySettings.Username,
-            registrySettings.Password,
+            credentials.Username,
+            credentials.Password,
             bearerToken,
             HttpMethod.Get,
             cancellationToken);
@@ -155,7 +165,7 @@ internal static partial class ContainerRegistryDigestResolver
         HttpClient client,
         AuthenticationHeaderValue challenge,
         string repository,
-        DokployResolvedRegistrySettings registrySettings,
+        RegistryCredentials credentials,
         CancellationToken cancellationToken)
     {
         var values = BearerParameterRegex()
@@ -185,11 +195,11 @@ internal static partial class ContainerRegistryDigestResolver
         var requestUri = new Uri($"{tokenUri}{separator}{string.Join("&", query)}");
         using var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
 
-        if (!string.IsNullOrWhiteSpace(registrySettings.Username) || !string.IsNullOrWhiteSpace(registrySettings.Password))
+        if (!string.IsNullOrWhiteSpace(credentials.Username) || !string.IsNullOrWhiteSpace(credentials.Password))
         {
-            var credentials = Convert.ToBase64String(
-                Encoding.UTF8.GetBytes($"{registrySettings.Username}:{registrySettings.Password}"));
-            request.Headers.Authorization = new AuthenticationHeaderValue("Basic", credentials);
+            var encodedCredentials = Convert.ToBase64String(
+                Encoding.UTF8.GetBytes($"{credentials.Username}:{credentials.Password}"));
+            request.Headers.Authorization = new AuthenticationHeaderValue("Basic", encodedCredentials);
         }
 
         using var response = await client.SendAsync(request, cancellationToken);
@@ -214,6 +224,46 @@ internal static partial class ContainerRegistryDigestResolver
             ? values.FirstOrDefault()?.Trim() ?? string.Empty
             : string.Empty;
         return digest.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static RegistryCredentials ResolveCredentials(
+        Uri registryApiBase,
+        DokployResolvedRegistrySettings registrySettings)
+    {
+        if (!TryCreateRegistryUri(registrySettings.RegistryUrl, out var configuredRegistry)
+            || !RegistryHostsMatch(registryApiBase, configuredRegistry))
+        {
+            return RegistryCredentials.Empty;
+        }
+
+        return new RegistryCredentials(registrySettings.Username, registrySettings.Password);
+    }
+
+    private static bool TryCreateRegistryUri(string registryUrl, out Uri registryUri)
+    {
+        var normalized = registryUrl.Trim();
+        if (!normalized.Contains("://", StringComparison.Ordinal))
+        {
+            normalized = $"https://{normalized}";
+        }
+
+        if (!normalized.EndsWith("/", StringComparison.Ordinal))
+        {
+            normalized += "/";
+        }
+
+        return Uri.TryCreate(normalized, UriKind.Absolute, out registryUri!);
+    }
+
+    private static bool RegistryHostsMatch(Uri imageRegistry, Uri configuredRegistry)
+    {
+        if (IsDockerHubHost(imageRegistry.Host) && IsDockerHubHost(configuredRegistry.Host))
+        {
+            return imageRegistry.Port == configuredRegistry.Port;
+        }
+
+        return imageRegistry.IdnHost.Equals(configuredRegistry.IdnHost, StringComparison.OrdinalIgnoreCase)
+            && imageRegistry.Port == configuredRegistry.Port;
     }
 
     private static RegistryImageReference Parse(string imageReference, string configuredRegistryUrl)
@@ -289,4 +339,9 @@ internal static partial class ContainerRegistryDigestResolver
         string Repository,
         string Tag,
         string ImageWithoutDigest);
+
+    private sealed record RegistryCredentials(string Username, string Password)
+    {
+        public static RegistryCredentials Empty { get; } = new(string.Empty, string.Empty);
+    }
 }

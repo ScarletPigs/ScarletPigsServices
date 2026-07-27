@@ -10,4 +10,7 @@
     <Project Path="src/ScarletPigsServices.Data/ScarletPigsServices.Data.csproj" />
     <Project Path="src/ScarletPigsServices.Website/ScarletPigsServices.Website.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Ridder.Hosting.Dokploy.Tests/Ridder.Hosting.Dokploy.Tests.csproj" />
+  </Folder>
 </Solution>

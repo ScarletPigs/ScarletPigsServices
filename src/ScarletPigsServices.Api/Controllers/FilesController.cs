@@ -24,7 +24,7 @@ public sealed class FilesController : ControllerBase
         return Ok(await _havocFileService.GetFoldersAsync(target ?? "server", cancellationToken));
     }
 
-    [Authorize(Policy = "CanUploadMissions")]
+    [Authorize]
     [RequestSizeLimit(MaxMissionUploadBytes)]
     [RequestFormLimits(MultipartBodyLengthLimit = MaxMissionUploadBytes)]
     [HttpPost("missions")]

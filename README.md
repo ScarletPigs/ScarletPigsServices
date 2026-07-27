@@ -22,6 +22,11 @@ scheme or path. Call it more than once to expose additional endpoint and domain
 combinations. When no mappings are configured, the integration continues to
 ask Dokploy to generate domains automatically.
 
+Every API controller requires the shared API key in the `X-API-Key` request
+header. Configure a random value of at least 32 bytes through the `API_KEY`
+deployment secret. The AppHost supplies the same secret to the API and Piglet;
+the previous JWT issuance and user endpoints are disabled.
+
 During local AppHost execution, Aspire runs `dotnet ef database update` and
 holds the API until migrations complete. During publishing, Aspire builds a
 Linux migration-bundle container that Dokploy deploys using the database

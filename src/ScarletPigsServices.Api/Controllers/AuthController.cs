@@ -8,6 +8,8 @@ using ScarletPigsServices.Data.Auth;
 
 namespace ScarletPigsServices.Api.Controllers;
 
+// JWT issuance is intentionally disabled while the API uses a single shared API key.
+[NonController]
 [ApiController]
 [Route("auth")]
 public sealed class AuthController(

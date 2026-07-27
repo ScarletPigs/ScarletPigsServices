@@ -27,7 +27,7 @@ var CREATOR_ID = builder.AddParameterFromConfiguration("CREATORID", "CREATORID",
 var GITHUB_TOKEN = builder.AddParameterFromConfiguration("GITHUBTOKEN", "GITHUBTOKEN", true).WithDescription("GitHub token for accessing repositories and performing actions on behalf of the bot.");
 var SERVER_IP = builder.AddParameterFromConfiguration("server-ip", "SERVER_IP", false).WithDescription("Game server hostname or IP address queried by the Piglet bot for Discord presence.");
 var SERVER_PORT = builder.AddParameterFromConfiguration("server-port", "SERVER_PORT", false).WithDescription("Game server port queried by the Piglet bot for Discord presence.");
-var JWT_SIGNING_KEY = builder.AddParameterFromConfiguration("jwt-signing-key", "JWT_SIGNING_KEY", true).WithDescription("At least 32 random bytes used to sign and validate API access tokens.");
+var API_KEY = builder.AddParameterFromConfiguration("api-key", "API_KEY", true).WithDescription("At least 32 random bytes used to authenticate requests to the Scarlet Pigs API.");
 var GOOGLE_SHEET_NAME = builder.AddParameterFromConfiguration("google-sheet-name", "GOOGLE_SHEET_NAME", true).WithDescription("Google Sheets workbook name used by the Piglet bot for schedule and questionnaire data.");
 var TYPE = builder.AddParameterFromConfiguration("type", "TYPE", true).WithDescription("Google service account credential type for the Piglet bot.");
 var PROJECT_ID = builder.AddParameterFromConfiguration("project-id", "PROJECT_ID", true).WithDescription("Google Cloud project ID for the Piglet bot service account.");
@@ -60,7 +60,7 @@ var scarletpigsDb = dbService.AddDatabase(ServiceRefs.DB);
 // Api Service
 var apiService = builder.AddProject<Projects.ScarletPigsServices_Api>(ServiceRefs.API)
     .WithExternalHttpEndpoints()
-    .WithEnvironment("Authentication__SigningKey", JWT_SIGNING_KEY)
+    .WithEnvironment("ApiKey__Key", API_KEY)
     .WithEnvironment("HAVOC_SERVER_FTP_HOST", HAVOC_SERVER_FTP_HOST)
     .WithEnvironment("HAVOC_SERVER_FTP_PORT", HAVOC_SERVER_FTP_PORT)
     .WithEnvironment("HAVOC_FTP_USER", HAVOC_FTP_USER)
@@ -133,6 +133,7 @@ var piglet = builder.AddPythonApp(ServiceRefs.DISCORD_BOT, "../../src/ScarletPig
     .WithEnvironment("AUTH_PROVIDER_X509_CERT_URL", AUTH_PROVIDER_X509_CERT_URL)
     .WithEnvironment("CLIENT_X509_CERT_URL", CLIENT_X509_CERT_URL)
     .WithEnvironment("SCARLETPIGS_API", apiService.GetEndpoint("http"))
+    .WithEnvironment("SCARLETPIGS_API_KEY", API_KEY)
     .WithReference(apiService)
     .PublishAsDockerFile()
     .PublishToDokploy(dokploy)

@@ -5,18 +5,20 @@ import json
 
 # Define the URL
 API_URL: str = os.getenv('SCARLETPIGS_API') or 'None'
+API_KEY: str = os.getenv('SCARLETPIGS_API_KEY') or ''
+API_HEADERS = {'X-API-Key': API_KEY}
 
 
 def get_events():
     # Make the request
-    response = requests.get(API_URL + '/events', timeout=20)
+    response = requests.get(API_URL + '/events', headers=API_HEADERS, timeout=20)
     list_of_events = json.loads(response.text)
     # Return the JSON response
     return list_of_events
 
 
 def get_event_at_date(datetime: datetime.datetime):
-    response = requests.get(API_URL + '/events', timeout=20)
+    response = requests.get(API_URL + '/events', headers=API_HEADERS, timeout=20)
     list_of_events = json.loads(response.text)
     for event in list_of_events:
         if (datetime.fromisoformat(event['startTime']) <= datetime and datetime.fromisoformat(event['endTime']) >= datetime):
@@ -37,7 +39,7 @@ def create_event(name: str, description: str, author: str, authorid: int, startt
         "startTime": starttime.isoformat(),
         "endTime": endtime.isoformat()
     }
-    response = requests.post(API_URL + '/events', json=event, timeout=20)
+    response = requests.post(API_URL + '/events', headers=API_HEADERS, json=event, timeout=20)
     print(response.status_code)
     # Return the JSON response
     return response.json()
@@ -45,7 +47,7 @@ def create_event(name: str, description: str, author: str, authorid: int, startt
 
 def get_event(event_id: int):
     # Make the request
-    response = requests.get(API_URL + '/events/' + str(event_id), timeout=20)
+    response = requests.get(API_URL + '/events/' + str(event_id), headers=API_HEADERS, timeout=20)
     # Return the JSON response
     return response.json()
 
@@ -63,12 +65,12 @@ def get_event(event_id: int):
 
 def edit_event(edited_event: dict):
     response = requests.put(API_URL + '/events/',
-                            json=edited_event, timeout=20)
+                            headers=API_HEADERS, json=edited_event, timeout=20)
 
 
 def delete_event(event_id: int):
     # Make the request
     response = requests.delete(
-        API_URL + '/events/' + str(event_id), timeout=20)
+        API_URL + '/events/' + str(event_id), headers=API_HEADERS, timeout=20)
     # Return the JSON response
     return response.ok

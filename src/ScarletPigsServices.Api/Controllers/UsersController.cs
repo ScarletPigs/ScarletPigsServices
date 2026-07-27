@@ -5,6 +5,8 @@ using ScarletPigsServices.Data.Auth;
 
 namespace ScarletPigsServices.Api.Controllers
 {
+    // This endpoint depends on JWT user claims and is disabled with JWT authentication.
+    [NonController]
     [ApiController]
     [Route("users")]
     public sealed class UsersController : ControllerBase

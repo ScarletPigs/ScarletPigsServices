@@ -28,6 +28,8 @@ var GITHUB_TOKEN = builder.AddParameterFromConfiguration("GITHUBTOKEN", "GITHUBT
 var SERVER_IP = builder.AddParameterFromConfiguration("server-ip", "SERVER_IP", false).WithDescription("Game server hostname or IP address queried by the Piglet bot for Discord presence.");
 var SERVER_PORT = builder.AddParameterFromConfiguration("server-port", "SERVER_PORT", false).WithDescription("Game server port queried by the Piglet bot for Discord presence.");
 var API_KEY = builder.AddParameterFromConfiguration("api-key", "API_KEY", true).WithDescription("At least 32 random bytes used to authenticate requests to the Scarlet Pigs API.");
+var OCAP_SECRET = builder.AddParameterFromConfiguration("ocap-secret", "OCAP_SECRET", true).WithDescription("Shared secret used to authenticate OCAP recording uploads and sign admin sessions.");
+var OCAP_ADMIN_STEAM_IDS = builder.AddParameterFromConfiguration("ocap-admin-steam-ids", "OCAP_AUTH_ADMINSTEAMIDS", false).WithDescription("Comma-separated Steam64 IDs authorized to access the OCAP administration pages.");
 var GOOGLE_SHEET_NAME = builder.AddParameterFromConfiguration("google-sheet-name", "GOOGLE_SHEET_NAME", true).WithDescription("Google Sheets workbook name used by the Piglet bot for schedule and questionnaire data.");
 var TYPE = builder.AddParameterFromConfiguration("type", "TYPE", true).WithDescription("Google service account credential type for the Piglet bot.");
 var PROJECT_ID = builder.AddParameterFromConfiguration("project-id", "PROJECT_ID", true).WithDescription("Google Cloud project ID for the Piglet bot service account.");
@@ -90,6 +92,31 @@ var migrations = apiService
     .PublishToDokploy(dokploy, options => options.RunOnce = true);
 
 apiService.WaitFor(migrations);
+
+// OCAP mission recording service
+var ocapService = builder.AddDockerfile(ServiceRefs.OCAP, "../../src/ScarletPigsServices.Ocap")
+    .WithHttpEndpoint(targetPort: 5000, name: "http")
+    .WithHttpHealthCheck("/api/healthcheck")
+    .WithEnvironment("OCAP_SECRET", OCAP_SECRET)
+    .WithEnvironment("OCAP_AUTH_ADMINSTEAMIDS", OCAP_ADMIN_STEAM_IDS)
+    .WithEnvironment("OCAP_CONVERSION_ENABLED", "true")
+    .WithEnvironment("OCAP_STREAMING_ENABLED", "true")
+    .WithEnvironment("OCAP_LOGGER", "true")
+    .WithVolume("scarletpigs-ocap-data", "/var/lib/ocap/data")
+    .WithVolume("scarletpigs-ocap-maps", "/var/lib/ocap/maps")
+    .WithVolume("scarletpigs-ocap-db", "/var/lib/ocap/db");
+
+// Dokploy terminates TLS before forwarding HTTPS traffic to OCAP's HTTP port.
+if (!builder.ExecutionContext.IsRunMode)
+{
+    ocapService.WithHttpsEndpoint(targetPort: 5000, name: "https");
+}
+
+ocapService
+    .WithExternalHttpEndpoints()
+    .PublishToDokploy(dokploy, options => options
+        .WithDomain("http", "ocap.scarletpigs.com")
+        .WithDomain("https", "ocap.scarletpigs.com"));
 
 // Web Frontend Service
 /*

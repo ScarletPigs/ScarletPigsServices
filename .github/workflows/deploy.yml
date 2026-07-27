@@ -50,6 +50,8 @@ jobs:
       SERVER_IP: ${{ secrets.SERVER_IP }}
       SERVER_PORT: ${{ secrets.SERVER_PORT }}
       API_KEY: ${{ secrets.API_KEY }}
+      OCAP_SECRET: ${{ secrets.OCAP_SECRET }}
+      OCAP_AUTH_ADMINSTEAMIDS: ${{ secrets.OCAP_AUTH_ADMINSTEAMIDS }}
       GOOGLE_SHEET_NAME: ${{ secrets.GOOGLE_SHEET_NAME }}
       TYPE: ${{ secrets.TYPE }}
       PROJECT_ID: ${{ secrets.PROJECT_ID }}
@@ -121,6 +123,8 @@ jobs:
             SERVER_IP
             SERVER_PORT
             API_KEY
+            OCAP_SECRET
+            OCAP_AUTH_ADMINSTEAMIDS
             GOOGLE_SHEET_NAME
             TYPE
             PROJECT_ID

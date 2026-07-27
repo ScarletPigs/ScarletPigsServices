@@ -1,12 +1,17 @@
 from discordbot import *
 import multiprocessing
 import os
+import schedule
 import utils
 
 log = utils.log_handler
 
 
 def main():
+    # The first launch imports the legacy workbook. Later launches see the
+    # persistent API marker and never initialize Google Sheets.
+    schedule.initialize()
+
     # Run the bot
     discordtoken = os.getenv("DISCORD_TOKEN")
     if discordtoken:

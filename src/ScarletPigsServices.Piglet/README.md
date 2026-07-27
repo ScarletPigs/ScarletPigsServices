@@ -1,9 +1,29 @@
-Eventually work with flask to create a web interface for the bot. Should allow for an easy an way to do actions without needing excel allowing me to move away from it and onto a proper database finally. A web interface would solve a lot of problems.
+# Piglet
+
+Piglet stores its schedule, Discord message registrations, and DLC
+questionnaire state in the Scarlet Pigs API. `scarletpigsapi.py` contains the
+typed Python client for the API's `snake_case` contract.
+
+## One-time Google Sheets import
+
+At startup Piglet reads the persistent
+`piglet.google_sheets_import` app-setting. If it is not marked complete, the bot
+uses the configured Google service-account credentials to import:
+
+- schedule, modlist, and questionnaire message registrations;
+- questionnaire rows and reaction counts;
+- current and archived operations; and
+- the configured number of schedule dates.
+
+The completion setting is written only after all imports succeed. Imported
+events use stable external IDs, so an interrupted import can safely retry on
+the next launch. Once the marker is complete, Piglet does not initialize or
+contact Google Sheets during normal operation.
 
 
 The invite link for the bot: https://discord.com/api/oauth2/authorize?client_id=1012077296515039324&permissions=8&scope=bot%20applications.commands
 
-Schedule sheet: https://docs.google.com/spreadsheets/d/1BAWa3vwD20Q_92kWG_jZlMIkMXgQlF5piot4TYnmscE/edit?usp=sharing
+Legacy schedule sheet (import source): https://docs.google.com/spreadsheets/d/1BAWa3vwD20Q_92kWG_jZlMIkMXgQlF5piot4TYnmscE/edit?usp=sharing
 
 
 

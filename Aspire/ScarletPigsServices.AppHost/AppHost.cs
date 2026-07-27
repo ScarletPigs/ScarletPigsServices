@@ -30,8 +30,9 @@ var SERVER_PORT = builder.AddParameterFromConfiguration("server-port", "SERVER_P
 var API_KEY = builder.AddParameterFromConfiguration("api-key", "API_KEY", true).WithDescription("At least 32 random bytes used to authenticate requests to the Scarlet Pigs API.");
 var OCAP_SECRET = builder.AddParameterFromConfiguration("ocap-secret", "OCAP_SECRET", true).WithDescription("Shared secret used to authenticate OCAP recording uploads and sign admin sessions.");
 var OCAP_ADMIN_STEAM_IDS = builder.AddParameterFromConfiguration("ocap-admin-steam-ids", "OCAP_AUTH_ADMINSTEAMIDS", false).WithDescription("Comma-separated Steam64 IDs authorized to access the OCAP administration pages.");
-var GOOGLE_SHEET_NAME = builder.AddParameterFromConfiguration("google-sheet-name", "GOOGLE_SHEET_NAME", true).WithDescription("Google Sheets workbook name used by the Piglet bot for schedule and questionnaire data.");
-var TYPE = builder.AddParameterFromConfiguration("type", "TYPE", true).WithDescription("Google service account credential type for the Piglet bot.");
+// Legacy Google credentials are used only until Piglet persists its successful import marker.
+var GOOGLE_SHEET_NAME = builder.AddParameterFromConfiguration("google-sheet-name", "GOOGLE_SHEET_NAME", true).WithDescription("Legacy Google Sheets workbook name used by Piglet's one-time data import.");
+var TYPE = builder.AddParameterFromConfiguration("type", "TYPE", true).WithDescription("Google service account credential type used by Piglet's one-time data import.");
 var PROJECT_ID = builder.AddParameterFromConfiguration("project-id", "PROJECT_ID", true).WithDescription("Google Cloud project ID for the Piglet bot service account.");
 var PRIVATE_KEY_ID = builder.AddParameterFromConfiguration("private-key-id", "PRIVATE_KEY_ID", true).WithDescription("Google service account private key identifier for the Piglet bot.");
 var PRIVATE_KEY = builder.AddParameterFromConfiguration("private-key", "PRIVATE_KEY", true).WithDescription("Google service account private key for the Piglet bot.");

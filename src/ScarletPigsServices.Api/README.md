@@ -1,28 +1,61 @@
-# Piglet API
+# Scarlet Pigs API
 
-The backend for the Piglet Discord bot and frontend.
+The backend for the Scarlet Pigs frontends and Piglet Discord bot.
 
 ## Authentication
 
-Users, password hashes, roles, lockout state, and refresh-token metadata are stored
-in PostgreSQL through ASP.NET Core Identity and Entity Framework Core.
+Every endpoint requires the shared API key in the `X-API-Key` request header.
+Set `ApiKey__Key` to a random value containing at least 32 bytes. The AppHost
+maps its `API_KEY` secret to this setting and supplies the same value to Piglet.
 
-The API exposes these endpoints:
+JWT issuance, ASP.NET Core Identity storage, and the former `/auth` and
+`/users/me` endpoints are intentionally removed while shared API-key
+authentication is in use.
 
-- `POST /auth/register` with `{ "email": "...", "password": "..." }`
-- `POST /auth/login` with `{ "email": "...", "password": "..." }`
-- `POST /auth/refresh` with `{ "refreshToken": "..." }`
-- `POST /auth/revoke` with a bearer access token and
-  `{ "refreshToken": "..." }`
+## Data API
 
-Access tokens are signed JWTs with a default lifetime of 15 minutes. Refresh tokens
-default to 30 days, are rotated on use, and are stored only as SHA-256 hashes.
-Reusing a rotated refresh token revokes the user's active refresh tokens.
+The data contract uses the same `snake_case` property names as the generated
+frontend database types. PostgreSQL stores the `mod_side` and `override_mode`
+enums natively and uses `jsonb` for JSON values.
 
-Set `Authentication__SigningKey` to a secret containing at least 32 random bytes.
-The AppHost maps its secret `JWT_SIGNING_KEY` parameter to this setting. Issuer,
-audience, and token lifetimes can be overridden using the other settings in the
-`Authentication` configuration section.
+Collection routes:
 
-The `UnitOrganizer` and `MissionMaker` roles are created by the Identity migration.
-Either role satisfies the `CanUploadMissions` policy.
+- `/api/admin-audit`
+- `/api/app-settings`
+- `/api/banner-images`
+- `/api/capabilities`
+- `/api/discord-roles`
+- `/api/event-types`
+- `/api/events`
+- `/api/highlight-videos`
+- `/api/mission-uploads`
+- `/api/modlists`
+- `/api/mods`
+- `/api/profiles`
+- `/api/role-overrides`
+- `/api/user-capability-overrides`
+
+Each collection supports:
+
+- `GET` with optional `offset` and `limit` query parameters;
+- `GET /{id}`;
+- `POST` with the matching insert shape;
+- `PATCH /{id}` with any non-key fields from the matching update shape;
+- `DELETE /{id}`.
+
+The composite-key collections use both key values in their item routes:
+
+- `/api/modlist-mods/{modlistId}/{steamId}`
+- `/api/role-capabilities/{roleId}/{capabilityKey}`
+- `/api/user-discord-roles/{userId}/{roleId}`
+
+Swagger is available at `/swagger` in Development. Select the `ApiKey` security
+scheme and enter the configured key to call endpoints from the UI.
+
+## Database lifecycle
+
+The migration history is intentionally a new baseline and requires a fresh
+database. During local AppHost execution, Aspire runs
+`dotnet ef database update` and holds the API until the migration completes.
+Production publishing creates the same migration as a one-shot migration
+bundle.

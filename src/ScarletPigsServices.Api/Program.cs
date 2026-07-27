@@ -1,11 +1,14 @@
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
 using ScarletPigsServices.Api.Authentication;
-using ScarletPigsServices.Api.Repositories;
 using ScarletPigsServices.Api.Services.Files;
 using ScarletPigsServices.Api.Services.Workshop;
 using ScarletPigsServices.Data;
+using ScarletPigsServices.Data.Models;
 using ScarletPigsServices.ServiceReferences;
 using System.Reflection;
 
@@ -19,7 +22,15 @@ namespace ScarletPigsServices.Api
 
             builder.AddServiceDefaults();
 
-            builder.Services.AddControllers();
+            builder.Services
+                .AddControllers()
+                .AddJsonOptions(options =>
+                {
+                    options.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower;
+                    options.JsonSerializerOptions.DictionaryKeyPolicy = JsonNamingPolicy.SnakeCaseLower;
+                    options.JsonSerializerOptions.Converters.Add(
+                        new JsonStringEnumConverter(JsonNamingPolicy.SnakeCaseLower));
+                });
 
             builder.Services
                 .AddOptions<ApiKeyAuthenticationOptions>(ApiKeyAuthenticationDefaults.AuthenticationScheme)
@@ -47,8 +58,11 @@ namespace ScarletPigsServices.Api
             });
 
             // Register services
-            builder.AddNpgsqlDbContext<ScarletPigsDbContext>(ServiceRefs.DB);
-            builder.Services.AddScoped<IEventRepository, EventRepository>();
+            builder.AddNpgsqlDbContext<ScarletPigsDbContext>(
+                ServiceRefs.DB,
+                configureDbContextOptions: options => options.UseNpgsql(npgsql => npgsql
+                    .MapEnum<ModSide>("mod_side")
+                    .MapEnum<OverrideMode>("override_mode")));
             builder.Services.AddSingleton<IHavocFileService, HavocFileService>();
             builder.Services.AddHttpClient<ISteamWorkshopService, SteamWorkshopService>(client =>
             {

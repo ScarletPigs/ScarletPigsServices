@@ -25,7 +25,15 @@ ask Dokploy to generate domains automatically.
 Every API controller requires the shared API key in the `X-API-Key` request
 header. Configure a random value of at least 32 bytes through the `API_KEY`
 deployment secret. The AppHost supplies the same secret to the API and Piglet;
-the previous JWT issuance and user endpoints are disabled.
+the previous JWT issuance, Identity persistence, and user endpoints are
+removed.
+
+The API data model is a fresh baseline matching the frontend database contract.
+It exposes the 17 resources under `/api`, uses `snake_case` JSON fields, and
+stores its two enums as native PostgreSQL enum types. Existing databases must
+be recreated before deploying this migration history. See the
+[API documentation](src/ScarletPigsServices.Api/README.md) for the route
+conventions.
 
 During local AppHost execution, Aspire runs `dotnet ef database update` and
 holds the API until migrations complete. During publishing, Aspire builds a

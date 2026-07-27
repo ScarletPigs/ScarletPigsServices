@@ -79,7 +79,7 @@ internal static class DokployResponseReaders
         return FindDockerImage(json.RootElement);
     }
 
-    internal static async Task<List<DokployMount>> ReadMountsFromResponseAsync(HttpResponseMessage response, ILogger? logger = null, string source = "mounts.allNamedByApplicationId")
+    internal static async Task<List<DokployMount>> ReadMountsFromResponseAsync(HttpResponseMessage response, ILogger? logger = null, string source = "mounts.listByServiceId")
     {
         var content = DokployJsonPayload.Normalize(await response.Content.ReadAsStringAsync());
         logger?.LogInformation("{MountSource} payload: {Payload}", source, DokployJsonPayload.GetPayloadSnippet(content));

@@ -27,7 +27,9 @@ var CREATOR_ID = builder.AddParameterFromConfiguration("CREATORID", "CREATORID",
 var GITHUB_TOKEN = builder.AddParameterFromConfiguration("GITHUBTOKEN", "GITHUBTOKEN", true).WithDescription("GitHub token for accessing repositories and performing actions on behalf of the bot.");
 var SERVER_IP = builder.AddParameterFromConfiguration("server-ip", "SERVER_IP", false).WithDescription("Game server hostname or IP address queried by the Piglet bot for Discord presence.");
 var SERVER_PORT = builder.AddParameterFromConfiguration("server-port", "SERVER_PORT", false).WithDescription("Game server port queried by the Piglet bot for Discord presence.");
-var JWT_SIGNING_KEY = builder.AddParameterFromConfiguration("jwt-signing-key", "JWT_SIGNING_KEY", true).WithDescription("At least 32 random bytes used to sign and validate API access tokens.");
+var API_KEY = builder.AddParameterFromConfiguration("api-key", "API_KEY", true).WithDescription("At least 32 random bytes used to authenticate requests to the Scarlet Pigs API.");
+var OCAP_SECRET = builder.AddParameterFromConfiguration("ocap-secret", "OCAP_SECRET", true).WithDescription("Shared secret used to authenticate OCAP recording uploads and sign admin sessions.");
+var OCAP_ADMIN_STEAM_IDS = builder.AddParameterFromConfiguration("ocap-admin-steam-ids", "OCAP_AUTH_ADMINSTEAMIDS", false).WithDescription("Comma-separated Steam64 IDs authorized to access the OCAP administration pages.");
 var GOOGLE_SHEET_NAME = builder.AddParameterFromConfiguration("google-sheet-name", "GOOGLE_SHEET_NAME", true).WithDescription("Google Sheets workbook name used by the Piglet bot for schedule and questionnaire data.");
 var TYPE = builder.AddParameterFromConfiguration("type", "TYPE", true).WithDescription("Google service account credential type for the Piglet bot.");
 var PROJECT_ID = builder.AddParameterFromConfiguration("project-id", "PROJECT_ID", true).WithDescription("Google Cloud project ID for the Piglet bot service account.");
@@ -60,7 +62,7 @@ var scarletpigsDb = dbService.AddDatabase(ServiceRefs.DB);
 // Api Service
 var apiService = builder.AddProject<Projects.ScarletPigsServices_Api>(ServiceRefs.API)
     .WithExternalHttpEndpoints()
-    .WithEnvironment("Authentication__SigningKey", JWT_SIGNING_KEY)
+    .WithEnvironment("ApiKey__Key", API_KEY)
     .WithEnvironment("HAVOC_SERVER_FTP_HOST", HAVOC_SERVER_FTP_HOST)
     .WithEnvironment("HAVOC_SERVER_FTP_PORT", HAVOC_SERVER_FTP_PORT)
     .WithEnvironment("HAVOC_FTP_USER", HAVOC_FTP_USER)
@@ -72,7 +74,9 @@ var apiService = builder.AddProject<Projects.ScarletPigsServices_Api>(ServiceRef
     .WithEnvironment("HAVOC_HEADLESS_FTP_PASSWORD", HAVOC_HEADLESS_FTP_PASSWORD)
     .WithEnvironment("HAVOC_HEADLESS_FTP_ROOT", HAVOC_HEADLESS_FTP_ROOT)
     .WithReference(scarletpigsDb)
-    .PublishToDokploy(dokploy);
+    .PublishToDokploy(dokploy, options => options
+        .WithDomain("http", "api.scarletpigs.com")
+        .WithDomain("https", "api.scarletpigs.com"));
 
 // Entity Framework migrations
 var migrations = apiService
@@ -88,6 +92,40 @@ var migrations = apiService
     .PublishToDokploy(dokploy, options => options.RunOnce = true);
 
 apiService.WaitFor(migrations);
+
+// OCAP mission recording service
+var ocapService = builder.AddContainer(ServiceRefs.OCAP, "ocap2/web", "2.1.1")
+    .WithImageRegistry("ghcr.io")
+    .WithHttpEndpoint(targetPort: 5000, name: "http")
+    .WithHttpHealthCheck("/api/healthcheck")
+    .WithEnvironment("OCAP_SECRET", OCAP_SECRET)
+    .WithEnvironment("OCAP_AUTH_ADMINSTEAMIDS", OCAP_ADMIN_STEAM_IDS)
+    .WithEnvironment("OCAP_CONVERSION_ENABLED", "true")
+    .WithEnvironment("OCAP_STREAMING_ENABLED", "true")
+    .WithEnvironment("OCAP_LOGGER", "true");
+
+if (builder.ExecutionContext.IsRunMode)
+{
+    ocapService
+        .WithBindMount("../../volumes/ocap/data", "/var/lib/ocap/data")
+        .WithBindMount("../../volumes/ocap/maps", "/var/lib/ocap/maps")
+        .WithBindMount("../../volumes/ocap/db", "/var/lib/ocap/db");
+}
+else
+{
+    // Dokploy terminates TLS before forwarding HTTPS traffic to OCAP's HTTP port.
+    ocapService
+        .WithHttpsEndpoint(targetPort: 5000, name: "https")
+        .WithVolume("scarletpigs-ocap-data", "/var/lib/ocap/data")
+        .WithVolume("scarletpigs-ocap-maps", "/var/lib/ocap/maps")
+        .WithVolume("scarletpigs-ocap-db", "/var/lib/ocap/db");
+}
+
+ocapService
+    .WithExternalHttpEndpoints()
+    .PublishToDokploy(dokploy, options => options
+        .WithDomain("http", "aar.scarletpigs.com")
+        .WithDomain("https", "aar.scarletpigs.com"));
 
 // Web Frontend Service
 /*
@@ -131,6 +169,7 @@ var piglet = builder.AddPythonApp(ServiceRefs.DISCORD_BOT, "../../src/ScarletPig
     .WithEnvironment("AUTH_PROVIDER_X509_CERT_URL", AUTH_PROVIDER_X509_CERT_URL)
     .WithEnvironment("CLIENT_X509_CERT_URL", CLIENT_X509_CERT_URL)
     .WithEnvironment("SCARLETPIGS_API", apiService.GetEndpoint("http"))
+    .WithEnvironment("SCARLETPIGS_API_KEY", API_KEY)
     .WithReference(apiService)
     .PublishAsDockerFile()
     .PublishToDokploy(dokploy)

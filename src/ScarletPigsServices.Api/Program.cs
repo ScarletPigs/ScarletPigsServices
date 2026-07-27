@@ -1,16 +1,14 @@
-using System.Security.Claims;
 using System.Text;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Identity;
-using Microsoft.Extensions.Options;
-using Microsoft.IdentityModel.Tokens;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
 using ScarletPigsServices.Api.Authentication;
-using ScarletPigsServices.Api.Repositories;
 using ScarletPigsServices.Api.Services.Files;
 using ScarletPigsServices.Api.Services.Workshop;
 using ScarletPigsServices.Data;
-using ScarletPigsServices.Data.Auth;
+using ScarletPigsServices.Data.Models;
 using ScarletPigsServices.ServiceReferences;
 using System.Reflection;
 
@@ -24,76 +22,47 @@ namespace ScarletPigsServices.Api
 
             builder.AddServiceDefaults();
 
-            builder.Services.AddControllers();
+            builder.Services
+                .AddControllers()
+                .AddJsonOptions(options =>
+                {
+                    options.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower;
+                    options.JsonSerializerOptions.DictionaryKeyPolicy = JsonNamingPolicy.SnakeCaseLower;
+                    options.JsonSerializerOptions.Converters.Add(
+                        new JsonStringEnumConverter(JsonNamingPolicy.SnakeCaseLower));
+                });
 
-            builder.Services.AddOptions<JwtOptions>()
-                .Bind(builder.Configuration.GetSection(JwtOptions.SectionName))
-                .Validate(options => !string.IsNullOrWhiteSpace(options.Issuer), "Authentication:Issuer is required.")
-                .Validate(options => !string.IsNullOrWhiteSpace(options.Audience), "Authentication:Audience is required.")
+            builder.Services
+                .AddOptions<ApiKeyAuthenticationOptions>(ApiKeyAuthenticationDefaults.AuthenticationScheme)
+                .Bind(builder.Configuration.GetSection(ApiKeyAuthenticationOptions.SectionName))
+                .Validate(options => !string.IsNullOrWhiteSpace(options.Key), "ApiKey:Key is required.")
                 .Validate(
-                    options => Encoding.UTF8.GetByteCount(options.SigningKey) >= 32,
-                    "Authentication:SigningKey must contain at least 32 bytes.")
-                .Validate(options => options.AccessTokenMinutes > 0, "Authentication:AccessTokenMinutes must be greater than zero.")
-                .Validate(options => options.RefreshTokenDays > 0, "Authentication:RefreshTokenDays must be greater than zero.")
+                    options => Encoding.UTF8.GetByteCount(options.Key) >= 32,
+                    "ApiKey:Key must contain at least 32 bytes.")
                 .ValidateOnStart();
 
             builder.Services
-                .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-                .AddJwtBearer(options =>
-                {
-                    options.MapInboundClaims = false;
-                });
-
-            builder.Services
-                .AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
-                .Configure<IOptions<JwtOptions>>((options, jwtOptionsAccessor) =>
-                {
-                    var jwtOptions = jwtOptionsAccessor.Value;
-                    options.TokenValidationParameters = new TokenValidationParameters
-                    {
-                        ValidateIssuerSigningKey = true,
-                        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.SigningKey)),
-                        ValidateIssuer = true,
-                        ValidIssuer = jwtOptions.Issuer,
-                        ValidateAudience = true,
-                        ValidAudience = jwtOptions.Audience,
-                        ValidateLifetime = true,
-                        RequireExpirationTime = true,
-                        RequireSignedTokens = true,
-                        ValidAlgorithms = [SecurityAlgorithms.HmacSha256],
-                        ClockSkew = TimeSpan.FromSeconds(30),
-                        NameClaimType = ClaimTypes.Name,
-                        RoleClaimType = ClaimTypes.Role,
-                    };
-                });
+                .AddAuthentication(ApiKeyAuthenticationDefaults.AuthenticationScheme)
+                .AddScheme<ApiKeyAuthenticationOptions, ApiKeyAuthenticationHandler>(
+                    ApiKeyAuthenticationDefaults.AuthenticationScheme,
+                    static _ => { });
 
             builder.Services.AddAuthorization(options =>
             {
-                options.AddPolicy("CanUploadMissions", policy =>
-                {
-                    policy.RequireAuthenticatedUser();
-                    policy.RequireRole(AuthRoles.UnitOrganizer, AuthRoles.MissionMaker);
-                });
+                var apiKeyPolicy = new AuthorizationPolicyBuilder(ApiKeyAuthenticationDefaults.AuthenticationScheme)
+                    .RequireAuthenticatedUser()
+                    .Build();
+
+                options.DefaultPolicy = apiKeyPolicy;
+                options.FallbackPolicy = apiKeyPolicy;
             });
 
             // Register services
-            builder.AddNpgsqlDbContext<ScarletPigsDbContext>(ServiceRefs.DB);
-            builder.Services
-                .AddIdentityCore<ApplicationUser>(options =>
-                {
-                    options.User.RequireUniqueEmail = true;
-                    options.Password.RequiredLength = 12;
-                    options.Lockout.AllowedForNewUsers = true;
-                    options.Lockout.MaxFailedAccessAttempts = 5;
-                    options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
-                })
-                .AddRoles<IdentityRole>()
-                .AddSignInManager()
-                .AddEntityFrameworkStores<ScarletPigsDbContext>()
-                .AddDefaultTokenProviders();
-            builder.Services.AddSingleton(TimeProvider.System);
-            builder.Services.AddScoped<ITokenService, JwtTokenService>();
-            builder.Services.AddScoped<IEventRepository, EventRepository>();
+            builder.AddNpgsqlDbContext<ScarletPigsDbContext>(
+                ServiceRefs.DB,
+                configureDbContextOptions: options => options.UseNpgsql(npgsql => npgsql
+                    .MapEnum<ModSide>("mod_side")
+                    .MapEnum<OverrideMode>("override_mode")));
             builder.Services.AddSingleton<IHavocFileService, HavocFileService>();
             builder.Services.AddHttpClient<ISteamWorkshopService, SteamWorkshopService>(client =>
             {
@@ -106,14 +75,12 @@ namespace ScarletPigsServices.Api
             {
                 options.SwaggerDoc("v1", new OpenApiInfo { Title = "Piglet API", Version = "v1" });
                 options.IncludeXmlComments(Path.Combine(AppContext.BaseDirectory, $"{Assembly.GetExecutingAssembly().GetName().Name}.xml"));
-                options.AddSecurityDefinition(JwtBearerDefaults.AuthenticationScheme, new OpenApiSecurityScheme
+                options.AddSecurityDefinition(ApiKeyAuthenticationDefaults.AuthenticationScheme, new OpenApiSecurityScheme
                 {
-                    Name = "Authorization",
-                    Type = SecuritySchemeType.Http,
-                    Scheme = "bearer",
-                    BearerFormat = "JWT",
+                    Name = ApiKeyAuthenticationDefaults.HeaderName,
+                    Type = SecuritySchemeType.ApiKey,
                     In = ParameterLocation.Header,
-                    Description = "Provide an access token issued by the Scarlet Pigs authentication endpoints."
+                    Description = $"Provide the configured API key in the {ApiKeyAuthenticationDefaults.HeaderName} header."
                 });
                 options.AddSecurityRequirement(new OpenApiSecurityRequirement
                 {
@@ -123,7 +90,7 @@ namespace ScarletPigsServices.Api
                             Reference = new OpenApiReference
                             {
                                 Type = ReferenceType.SecurityScheme,
-                                Id = JwtBearerDefaults.AuthenticationScheme
+                                Id = ApiKeyAuthenticationDefaults.AuthenticationScheme
                             }
                         },
                         Array.Empty<string>()

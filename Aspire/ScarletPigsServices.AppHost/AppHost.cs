@@ -94,29 +94,38 @@ var migrations = apiService
 apiService.WaitFor(migrations);
 
 // OCAP mission recording service
-var ocapService = builder.AddDockerfile(ServiceRefs.OCAP, "../../src/ScarletPigsServices.Ocap")
+var ocapService = builder.AddContainer(ServiceRefs.OCAP, "ocap2/web", "2.1.1")
+    .WithImageRegistry("ghcr.io")
     .WithHttpEndpoint(targetPort: 5000, name: "http")
     .WithHttpHealthCheck("/api/healthcheck")
     .WithEnvironment("OCAP_SECRET", OCAP_SECRET)
     .WithEnvironment("OCAP_AUTH_ADMINSTEAMIDS", OCAP_ADMIN_STEAM_IDS)
     .WithEnvironment("OCAP_CONVERSION_ENABLED", "true")
     .WithEnvironment("OCAP_STREAMING_ENABLED", "true")
-    .WithEnvironment("OCAP_LOGGER", "true")
-    .WithVolume("scarletpigs-ocap-data", "/var/lib/ocap/data")
-    .WithVolume("scarletpigs-ocap-maps", "/var/lib/ocap/maps")
-    .WithVolume("scarletpigs-ocap-db", "/var/lib/ocap/db");
+    .WithEnvironment("OCAP_LOGGER", "true");
 
-// Dokploy terminates TLS before forwarding HTTPS traffic to OCAP's HTTP port.
-if (!builder.ExecutionContext.IsRunMode)
+if (builder.ExecutionContext.IsRunMode)
 {
-    ocapService.WithHttpsEndpoint(targetPort: 5000, name: "https");
+    ocapService
+        .WithBindMount("../../volumes/ocap/data", "/var/lib/ocap/data")
+        .WithBindMount("../../volumes/ocap/maps", "/var/lib/ocap/maps")
+        .WithBindMount("../../volumes/ocap/db", "/var/lib/ocap/db");
+}
+else
+{
+    // Dokploy terminates TLS before forwarding HTTPS traffic to OCAP's HTTP port.
+    ocapService
+        .WithHttpsEndpoint(targetPort: 5000, name: "https")
+        .WithVolume("scarletpigs-ocap-data", "/var/lib/ocap/data")
+        .WithVolume("scarletpigs-ocap-maps", "/var/lib/ocap/maps")
+        .WithVolume("scarletpigs-ocap-db", "/var/lib/ocap/db");
 }
 
 ocapService
     .WithExternalHttpEndpoints()
     .PublishToDokploy(dokploy, options => options
-        .WithDomain("http", "ocap.scarletpigs.com")
-        .WithDomain("https", "ocap.scarletpigs.com"));
+        .WithDomain("http", "aar.scarletpigs.com")
+        .WithDomain("https", "aar.scarletpigs.com"));
 
 // Web Frontend Service
 /*

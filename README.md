@@ -76,15 +76,16 @@ supplied by the AppHost.
 
 ### OCAP2 Web
 
-OCAP2 Web is exposed at `ocap.scarletpigs.com` over HTTP and HTTPS. Its derived
-image is pinned to the upstream `v2.1.1` release and configures request logging,
-recording conversion, and live streaming.
+OCAP2 Web is exposed at `aar.scarletpigs.com` over HTTP and HTTPS. Aspire uses
+the upstream `ghcr.io/ocap2/web:2.1.1` image directly and configures request
+logging, recording conversion, and live streaming.
 
 Recordings, maps, and the SQLite database use separate persistent Dokploy
-volumes. Repository-managed seed files belong under
-[`src/ScarletPigsServices.Ocap/volume`](src/ScarletPigsServices.Ocap/volume) and
-are synchronized into those volumes whenever the container starts. Production
-requires the `OCAP_SECRET` and `OCAP_AUTH_ADMINSTEAMIDS` values.
+volumes. During local development, those paths are instead bind-mounted from
+[`volumes/ocap`](volumes/ocap). Local volume contents are not included in the
+published image or copied to Dokploy; populate the production volumes manually
+when needed. Production requires the `OCAP_SECRET` and
+`OCAP_AUTH_ADMINSTEAMIDS` values.
 
 ### Deployment configuration
 

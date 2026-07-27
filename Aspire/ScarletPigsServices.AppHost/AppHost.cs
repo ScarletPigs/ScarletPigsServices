@@ -72,7 +72,9 @@ var apiService = builder.AddProject<Projects.ScarletPigsServices_Api>(ServiceRef
     .WithEnvironment("HAVOC_HEADLESS_FTP_PASSWORD", HAVOC_HEADLESS_FTP_PASSWORD)
     .WithEnvironment("HAVOC_HEADLESS_FTP_ROOT", HAVOC_HEADLESS_FTP_ROOT)
     .WithReference(scarletpigsDb)
-    .PublishToDokploy(dokploy);
+    .PublishToDokploy(dokploy, options => options
+        .WithDomain("http", "api.scarletpigs.com")
+        .WithDomain("https", "api.scarletpigs.com"));
 
 // Entity Framework migrations
 var migrations = apiService

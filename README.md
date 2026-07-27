@@ -7,7 +7,20 @@ Repository hosting the various services used on the Scarlet Pigs server.
 The AppHost includes a vendored Dokploy publishing integration and publishes
 PostgreSQL, an EF Core migration bundle, the API, and the Piglet bot. The two website
 resources remain disabled and are not included in deployment. The API's HTTP
-endpoint is external, so the integration creates or updates its Dokploy domain.
+endpoints are external, so the integration creates or updates its Dokploy domains.
+The API configures its public domain through the same options callback pattern
+used by Aspire extension methods:
+
+```csharp
+.PublishToDokploy(dokploy, options => options
+    .WithDomain("http", "api.scarletpigs.com")
+    .WithDomain("https", "api.scarletpigs.com"));
+```
+
+`WithDomain` maps a named external Aspire endpoint to a host name without a
+scheme or path. Call it more than once to expose additional endpoint and domain
+combinations. When no mappings are configured, the integration continues to
+ask Dokploy to generate domains automatically.
 
 During local AppHost execution, Aspire runs `dotnet ef database update` and
 holds the API until migrations complete. During publishing, Aspire builds a

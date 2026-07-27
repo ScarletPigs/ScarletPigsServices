@@ -152,7 +152,7 @@ internal sealed class DokployApplicationService
 
         if (publishAnnotation?.Options.CreateDomainsForExternalEndpoints ?? true)
         {
-            await EnsureApplicationDomainAsync(application, rsc);
+            await EnsureApplicationDomainsAsync(application, rsc, publishAnnotation?.Options.Domains ?? []);
         }
 
         if (publishAnnotation?.Options.RunOnce == true)
@@ -842,7 +842,10 @@ internal sealed class DokployApplicationService
         return $"\"{encoded}\"";
     }
 
-    private async Task EnsureApplicationDomainAsync(DokployApplication application, IComputeResource resource)
+    private async Task EnsureApplicationDomainsAsync(
+        DokployApplication application,
+        IComputeResource resource,
+        IReadOnlyList<DokployDomainConfiguration> configuredDomains)
     {
         if (string.IsNullOrWhiteSpace(application.Id))
         {
@@ -852,6 +855,12 @@ internal sealed class DokployApplicationService
         var externalEndpoints = GetExternalEndpoints(resource);
         if (externalEndpoints.Count == 0)
         {
+            if (configuredDomains.Count > 0)
+            {
+                throw new InvalidOperationException(
+                    $"Application '{application.AppName}' configures Dokploy domains, but the Aspire resource has no external endpoints.");
+            }
+
             _client.Logger.LogInformation("Application {AppName} has no external Aspire endpoints. Skipping domain creation.", application.AppName);
             return;
         }
@@ -863,30 +872,82 @@ internal sealed class DokployApplicationService
         var appNameForDomain = string.IsNullOrWhiteSpace(application.AppName) ? application.Name : application.AppName;
         if (string.IsNullOrWhiteSpace(appNameForDomain))
         {
-            throw new InvalidOperationException("Application name is required to generate a domain.");
+            throw new InvalidOperationException("Application name is required to configure domains.");
         }
 
-        var generateBody = JsonSerializer.Serialize(new { appName = appNameForDomain }, DokployApiClient.JsonOptions);
+        List<ApplicationDomainConfig> domainsToReconcile;
+        if (configuredDomains.Count == 0)
+        {
+            var generatedHost = await GenerateApplicationDomainAsync(appNameForDomain);
+            domainsToReconcile = externalEndpoints
+                .Select(endpoint => new ApplicationDomainConfig(generatedHost, endpoint))
+                .ToList();
+        }
+        else
+        {
+            domainsToReconcile = new List<ApplicationDomainConfig>(configuredDomains.Count);
+            foreach (var configuredDomain in configuredDomains)
+            {
+                var endpoint = externalEndpoints.FirstOrDefault(candidate =>
+                    string.Equals(candidate.Name, configuredDomain.EndpointName, StringComparison.OrdinalIgnoreCase));
 
-        using var generateResponse = await _client.Http.PostAsync("api/domain.generateDomain", DokployApiClient.CreateJsonContent(generateBody));
-        generateResponse.EnsureSuccessStatusCode();
+                if (endpoint is null)
+                {
+                    var availableEndpoints = string.Join(", ", externalEndpoints.Select(candidate => candidate.Name));
+                    throw new InvalidOperationException(
+                        $"Dokploy domain '{configuredDomain.Host}' references endpoint '{configuredDomain.EndpointName}', "
+                        + $"but that endpoint is not external on application '{appNameForDomain}'. Available external endpoints: {availableEndpoints}.");
+                }
 
-        var generatedHost = await DokployResponseReaders.ReadGeneratedHostFromResponseAsync(generateResponse, _client.Logger)
-            ?? throw new InvalidOperationException($"Could not parse generated domain host for application '{appNameForDomain}'.");
+                domainsToReconcile.Add(new ApplicationDomainConfig(configuredDomain.Host, endpoint));
+            }
+        }
 
         var unmatchedDomains = new List<DokployDomain>(existingDomains);
+        var reconciliations = new List<(ApplicationDomainConfig Config, DokployDomain? Existing)>(domainsToReconcile.Count);
 
-        foreach (var endpoint in externalEndpoints)
+        foreach (var config in domainsToReconcile)
         {
-            var endpointUrl = BuildApplicationEndpointUrl(generatedHost, endpoint);
             var existingDomain = unmatchedDomains
-                .FirstOrDefault(d => string.Equals(d.Host, generatedHost, StringComparison.OrdinalIgnoreCase) && d.Port == endpoint.Port)
-                ?? unmatchedDomains.FirstOrDefault(d => d.Port == endpoint.Port)
-                ?? unmatchedDomains.FirstOrDefault();
+                .FirstOrDefault(domain =>
+                    string.Equals(domain.Host, config.Host, StringComparison.OrdinalIgnoreCase)
+                    && domain.Port == config.Endpoint.Port)
+                ?? unmatchedDomains.FirstOrDefault(domain =>
+                    string.Equals(domain.Host, config.Host, StringComparison.OrdinalIgnoreCase));
 
             if (existingDomain is not null)
             {
                 unmatchedDomains.Remove(existingDomain);
+            }
+
+            reconciliations.Add((config, existingDomain));
+        }
+
+        for (var index = 0; index < reconciliations.Count; index++)
+        {
+            var reconciliation = reconciliations[index];
+            if (reconciliation.Existing is not null)
+            {
+                continue;
+            }
+
+            var fallbackDomain = unmatchedDomains.FirstOrDefault(domain => domain.Port == reconciliation.Config.Endpoint.Port)
+                ?? unmatchedDomains.FirstOrDefault();
+
+            if (fallbackDomain is not null)
+            {
+                unmatchedDomains.Remove(fallbackDomain);
+            }
+
+            reconciliations[index] = (reconciliation.Config, fallbackDomain);
+        }
+
+        foreach (var (config, existingDomain) in reconciliations)
+        {
+            var endpointUrl = BuildApplicationEndpointUrl(config.Host, config.Endpoint);
+
+            if (existingDomain is not null)
+            {
                 if (string.IsNullOrWhiteSpace(existingDomain.Id))
                 {
                     throw new InvalidOperationException($"Application domain '{existingDomain.Host}' exists for application '{appNameForDomain}' but no domainId was returned.");
@@ -895,38 +956,49 @@ internal sealed class DokployApplicationService
                 var updateBody = JsonSerializer.Serialize(new
                 {
                     domainId = existingDomain.Id,
-                    host = generatedHost,
-                    port = endpoint.Port,
-                    https = endpoint.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase),
+                    host = config.Host,
+                    port = config.Endpoint.Port,
+                    https = config.Endpoint.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase),
                     domainType = "application"
                 }, DokployApiClient.JsonOptions);
 
                 using var updateResponse = await _client.Http.PostAsync("api/domain.update", DokployApiClient.CreateJsonContent(updateBody));
                 updateResponse.EnsureSuccessStatusCode();
 
-                _client.Logger.LogInformation("Updated deployed application URL {EndpointUrl} for application {AppName} using endpoint {EndpointName}.", endpointUrl, appNameForDomain, endpoint.Name);
+                _client.Logger.LogInformation("Updated deployed application URL {EndpointUrl} for application {AppName} using endpoint {EndpointName}.", endpointUrl, appNameForDomain, config.Endpoint.Name);
                 continue;
             }
 
             var createBody = JsonSerializer.Serialize(new
             {
                 applicationId = application.Id,
-                host = generatedHost,
-                port = endpoint.Port,
-                https = endpoint.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase),
+                host = config.Host,
+                port = config.Endpoint.Port,
+                https = config.Endpoint.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase),
                 domainType = "application"
             }, DokployApiClient.JsonOptions);
 
             using var createResponse = await _client.Http.PostAsync("api/domain.create", DokployApiClient.CreateJsonContent(createBody));
             createResponse.EnsureSuccessStatusCode();
 
-            _client.Logger.LogInformation("Created deployed application URL {EndpointUrl} for application {AppName} using endpoint {EndpointName}.", endpointUrl, appNameForDomain, endpoint.Name);
+            _client.Logger.LogInformation("Created deployed application URL {EndpointUrl} for application {AppName} using endpoint {EndpointName}.", endpointUrl, appNameForDomain, config.Endpoint.Name);
         }
 
         if (unmatchedDomains.Count > 0)
         {
             _client.Logger.LogInformation("Application {AppName} has {ExtraCount} extra existing domain(s) beyond the {ExpectedCount} external Aspire endpoint(s); leaving them unchanged.", appNameForDomain, unmatchedDomains.Count, externalEndpoints.Count);
         }
+    }
+
+    private async Task<string> GenerateApplicationDomainAsync(string applicationName)
+    {
+        var generateBody = JsonSerializer.Serialize(new { appName = applicationName }, DokployApiClient.JsonOptions);
+
+        using var generateResponse = await _client.Http.PostAsync("api/domain.generateDomain", DokployApiClient.CreateJsonContent(generateBody));
+        generateResponse.EnsureSuccessStatusCode();
+
+        return await DokployResponseReaders.ReadGeneratedHostFromResponseAsync(generateResponse, _client.Logger)
+            ?? throw new InvalidOperationException($"Could not parse generated domain host for application '{applicationName}'.");
     }
 
     private static string BuildApplicationEndpointUrl(string host, ExternalEndpointConfig endpoint)
@@ -949,6 +1021,7 @@ internal sealed class DokployApplicationService
             .ToList();
     }
 
+    private sealed record ApplicationDomainConfig(string Host, ExternalEndpointConfig Endpoint);
     private sealed record ExternalEndpointConfig(string Name, string Scheme, int Port);
     private sealed record DokployMountSpec(string Type, string MountPath, string? HostPath, string? VolumeName);
 }

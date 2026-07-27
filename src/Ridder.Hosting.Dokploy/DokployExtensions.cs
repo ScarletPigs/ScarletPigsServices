@@ -276,6 +276,12 @@ public static class DokployExtensions
             o.ConfigureEnvironmentVariables = options.ConfigureEnvironmentVariables;
             o.ConfigureMounts = options.ConfigureMounts;
             o.CreateDomainsForExternalEndpoints = options.CreateDomainsForExternalEndpoints;
+            o.RunOnce = options.RunOnce;
+
+            foreach (var domain in options.Domains)
+            {
+                o.WithDomain(domain.EndpointName, domain.Host);
+            }
         });
     }
 

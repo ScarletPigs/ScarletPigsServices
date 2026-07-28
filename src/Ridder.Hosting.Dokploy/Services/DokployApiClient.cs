@@ -14,18 +14,22 @@ internal sealed class DokployApiClient : IDisposable
     internal readonly DokployResolvedRegistrySettings RegistrySettings;
     internal readonly HttpClient Http;
 
-    internal DokployApiClient(string apiKey, string url, IHostEnvironment env, ILogger logger, DokployResolvedRegistrySettings registrySettings)
+    internal DokployApiClient(
+        string apiKey,
+        string url,
+        IHostEnvironment env,
+        ILogger logger,
+        DokployResolvedRegistrySettings registrySettings,
+        HttpMessageHandler? handler = null)
     {
         Env = env;
         Logger = logger;
         RegistrySettings = registrySettings;
 
         var baseUrl = url.EndsWith("/", StringComparison.Ordinal) ? url : $"{url}/";
-        Http = new HttpClient
-        {
-            BaseAddress = new Uri(baseUrl, UriKind.Absolute),
-            Timeout = TimeSpan.FromMinutes(5)
-        };
+        Http = handler is null ? new HttpClient() : new HttpClient(handler);
+        Http.BaseAddress = new Uri(baseUrl, UriKind.Absolute);
+        Http.Timeout = TimeSpan.FromMinutes(5);
         Http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         Http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
         Http.DefaultRequestHeaders.Add("x-api-key", apiKey);

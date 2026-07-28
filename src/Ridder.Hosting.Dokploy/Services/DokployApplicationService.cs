@@ -150,6 +150,8 @@ internal sealed class DokployApplicationService
             await EnsureApplicationMountsAsync(application, rsc);
         }
 
+        await ConfigureStatefulRolloutPolicyAsync(application, rsc, cancellationToken);
+
         if (publishAnnotation?.Options.CreateDomainsForExternalEndpoints ?? true)
         {
             await EnsureApplicationDomainsAsync(application, rsc, publishAnnotation?.Options.Domains ?? []);
@@ -159,6 +161,54 @@ internal sealed class DokployApplicationService
         {
             await ConfigureRunOncePolicyAsync(application, rsc, cancellationToken);
         }
+    }
+
+    internal async Task ConfigureStatefulRolloutPolicyAsync(
+        DokployApplication application,
+        IComputeResource resource,
+        CancellationToken cancellationToken)
+    {
+        if (!resource.TryGetContainerMounts(out var containerMounts)
+            || !containerMounts.Any(mount => mount.Type == ContainerMountType.Volume))
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(application.Id))
+        {
+            throw new InvalidOperationException(
+                $"Application '{resource.Name}' has no applicationId, so its stateful rollout policy cannot be configured.");
+        }
+
+        var body = JsonSerializer.Serialize(new
+        {
+            applicationId = application.Id,
+            updateConfigSwarm = new
+            {
+                Parallelism = 1,
+                FailureAction = "rollback",
+                Monitor = 5_000_000_000L,
+                MaxFailureRatio = 0,
+                Order = "stop-first"
+            },
+            rollbackConfigSwarm = new
+            {
+                Parallelism = 1,
+                FailureAction = "pause",
+                Monitor = 5_000_000_000L,
+                MaxFailureRatio = 0,
+                Order = "stop-first"
+            }
+        }, DokployApiClient.JsonOptions);
+
+        using var response = await _client.Http.PostAsync(
+            "api/application.update",
+            DokployApiClient.CreateJsonContent(body),
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+        _client.Logger.LogInformation(
+            "Configured application {AppName} to stop its existing task before update or rollback because it uses a persistent volume.",
+            resource.Name);
     }
 
     private async Task ConfigureRunOncePolicyAsync(
@@ -455,7 +505,7 @@ internal sealed class DokployApplicationService
         _client.Logger.LogInformation("Saved {Count} environment variable(s) for application {AppName}.", environmentVariables.Count, resource.Name);
     }
 
-    private async Task EnsureApplicationMountsAsync(DokployApplication application, IComputeResource resource)
+    internal async Task EnsureApplicationMountsAsync(DokployApplication application, IComputeResource resource)
     {
         if (string.IsNullOrWhiteSpace(application.Id))
         {
@@ -479,23 +529,39 @@ internal sealed class DokployApplicationService
             return;
         }
 
-        using var existingMountsResponse = await _client.Http.GetAsync($"api/mounts.allNamedByApplicationId?applicationId={Uri.EscapeDataString(application.Id)}");
+        using var existingMountsResponse = await _client.Http.GetAsync(
+            $"api/mounts.listByServiceId?serviceId={Uri.EscapeDataString(application.Id)}&serviceType=application");
         existingMountsResponse.EnsureSuccessStatusCode();
 
-        var existingMounts = await DokployResponseReaders.ReadMountsFromResponseAsync(existingMountsResponse, _client.Logger);
+        var existingMounts = await DokployResponseReaders.ReadMountsFromResponseAsync(
+            existingMountsResponse,
+            _client.Logger,
+            "mounts.listByServiceId");
         var unmatchedExistingMounts = new List<DokployMount>(existingMounts);
 
         foreach (var desiredMount in desiredMounts)
         {
-            var exactMatch = unmatchedExistingMounts.FirstOrDefault(existing => MountIdentityMatches(existing, desiredMount));
+            var targetMatches = unmatchedExistingMounts
+                .Where(existing => MountLocationMatches(existing, desiredMount))
+                .ToList();
+            var exactMatch = targetMatches.FirstOrDefault(existing => MountIdentityMatches(existing, desiredMount));
+
             if (exactMatch is not null)
             {
                 unmatchedExistingMounts.Remove(exactMatch);
+                var redundantMatches = targetMatches
+                    .Where(existing => !ReferenceEquals(existing, exactMatch))
+                    .ToList();
+                unmatchedExistingMounts.RemoveAll(redundantMatches.Contains);
+                await RemoveRedundantMountsAsync(
+                    application,
+                    resource,
+                    redundantMatches);
                 _client.Logger.LogInformation("Mount {MountPath} for application {AppName} already exists as {MountType}.", desiredMount.MountPath, resource.Name, desiredMount.Type);
                 continue;
             }
 
-            var targetMatch = unmatchedExistingMounts.FirstOrDefault(existing => MountLocationMatches(existing, desiredMount));
+            var targetMatch = targetMatches.FirstOrDefault();
             if (targetMatch is not null)
             {
                 unmatchedExistingMounts.Remove(targetMatch);
@@ -519,6 +585,14 @@ internal sealed class DokployApplicationService
                 using var updateResponse = await _client.Http.PostAsync("api/mounts.update", DokployApiClient.CreateJsonContent(updateBody));
                 updateResponse.EnsureSuccessStatusCode();
 
+                var redundantMatches = targetMatches
+                    .Where(existing => !ReferenceEquals(existing, targetMatch))
+                    .ToList();
+                unmatchedExistingMounts.RemoveAll(redundantMatches.Contains);
+                await RemoveRedundantMountsAsync(
+                    application,
+                    resource,
+                    redundantMatches);
                 _client.Logger.LogInformation("Updated mount {MountPath} for application {AppName} to {MountType}.", desiredMount.MountPath, resource.Name, desiredMount.Type);
                 continue;
             }
@@ -987,6 +1061,37 @@ internal sealed class DokployApplicationService
         if (unmatchedDomains.Count > 0)
         {
             _client.Logger.LogInformation("Application {AppName} has {ExtraCount} extra existing domain(s) beyond the {ExpectedCount} external Aspire endpoint(s); leaving them unchanged.", appNameForDomain, unmatchedDomains.Count, externalEndpoints.Count);
+        }
+    }
+
+    private async Task RemoveRedundantMountsAsync(
+        DokployApplication application,
+        IComputeResource resource,
+        IEnumerable<DokployMount> redundantMounts)
+    {
+        foreach (var redundantMount in redundantMounts)
+        {
+            if (string.IsNullOrWhiteSpace(redundantMount.Id))
+            {
+                throw new InvalidOperationException(
+                    $"Duplicate mount '{redundantMount.MountPath}' exists for application '{resource.Name}' but no mountId was returned.");
+            }
+
+            var removeBody = JsonSerializer.Serialize(new
+            {
+                mountId = redundantMount.Id
+            }, DokployApiClient.JsonOptions);
+
+            using var removeResponse = await _client.Http.PostAsync(
+                "api/mounts.remove",
+                DokployApiClient.CreateJsonContent(removeBody));
+            removeResponse.EnsureSuccessStatusCode();
+            _client.Logger.LogInformation(
+                "Removed redundant mount record {MountId} for {MountPath} from application {AppName} ({ApplicationId}).",
+                redundantMount.Id,
+                redundantMount.MountPath,
+                resource.Name,
+                application.Id);
         }
     }
 

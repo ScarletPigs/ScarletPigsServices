@@ -150,6 +150,8 @@ internal sealed class DokployApplicationService
             await EnsureApplicationMountsAsync(application, rsc);
         }
 
+        await ConfigureStatefulRolloutPolicyAsync(application, rsc, cancellationToken);
+
         if (publishAnnotation?.Options.CreateDomainsForExternalEndpoints ?? true)
         {
             await EnsureApplicationDomainsAsync(application, rsc, publishAnnotation?.Options.Domains ?? []);
@@ -159,6 +161,54 @@ internal sealed class DokployApplicationService
         {
             await ConfigureRunOncePolicyAsync(application, rsc, cancellationToken);
         }
+    }
+
+    internal async Task ConfigureStatefulRolloutPolicyAsync(
+        DokployApplication application,
+        IComputeResource resource,
+        CancellationToken cancellationToken)
+    {
+        if (!resource.TryGetContainerMounts(out var containerMounts)
+            || !containerMounts.Any(mount => mount.Type == ContainerMountType.Volume))
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(application.Id))
+        {
+            throw new InvalidOperationException(
+                $"Application '{resource.Name}' has no applicationId, so its stateful rollout policy cannot be configured.");
+        }
+
+        var body = JsonSerializer.Serialize(new
+        {
+            applicationId = application.Id,
+            updateConfigSwarm = new
+            {
+                Parallelism = 1,
+                FailureAction = "rollback",
+                Monitor = 5_000_000_000L,
+                MaxFailureRatio = 0,
+                Order = "stop-first"
+            },
+            rollbackConfigSwarm = new
+            {
+                Parallelism = 1,
+                FailureAction = "pause",
+                Monitor = 5_000_000_000L,
+                MaxFailureRatio = 0,
+                Order = "stop-first"
+            }
+        }, DokployApiClient.JsonOptions);
+
+        using var response = await _client.Http.PostAsync(
+            "api/application.update",
+            DokployApiClient.CreateJsonContent(body),
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+        _client.Logger.LogInformation(
+            "Configured application {AppName} to stop its existing task before update or rollback because it uses a persistent volume.",
+            resource.Name);
     }
 
     private async Task ConfigureRunOncePolicyAsync(

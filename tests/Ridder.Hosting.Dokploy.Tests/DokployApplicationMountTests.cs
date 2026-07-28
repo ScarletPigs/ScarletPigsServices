@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using Aspire.Hosting.ApplicationModel;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
@@ -12,6 +13,48 @@ namespace Ridder.Hosting.Dokploy.Tests;
 
 public sealed class DokployApplicationMountTests
 {
+    [Fact]
+    public async Task ConfigureStatefulRolloutPolicyAsync_UsesStopFirstForVolumeBackedResource()
+    {
+        using var handler = new RecordingHandler(_ => JsonResponse("{}"));
+        using var client = CreateClient(handler);
+        var service = new DokployApplicationService(client, new DokployProjectService(client));
+
+        await service.ConfigureStatefulRolloutPolicyAsync(
+            new DokployApplication { Id = "db-app", Name = "dbserver", AppName = "dbserver-generated" },
+            CreatePostgresResource(),
+            CancellationToken.None);
+
+        var request = Assert.Single(handler.Requests);
+        Assert.Equal(HttpMethod.Post, request.Method);
+        Assert.Equal("/api/application.update", request.Uri.AbsolutePath);
+        using var document = JsonDocument.Parse(request.Body!);
+        var root = document.RootElement;
+        var updateConfig = root.GetProperty("updateConfigSwarm");
+        var rollbackConfig = root.GetProperty("rollbackConfigSwarm");
+        Assert.Equal(1, updateConfig.GetProperty("Parallelism").GetInt32());
+        Assert.Equal("rollback", updateConfig.GetProperty("FailureAction").GetString());
+        Assert.Equal("stop-first", updateConfig.GetProperty("Order").GetString());
+        Assert.Equal(1, rollbackConfig.GetProperty("Parallelism").GetInt32());
+        Assert.Equal("pause", rollbackConfig.GetProperty("FailureAction").GetString());
+        Assert.Equal("stop-first", rollbackConfig.GetProperty("Order").GetString());
+    }
+
+    [Fact]
+    public async Task ConfigureStatefulRolloutPolicyAsync_DoesNotChangeStatelessResource()
+    {
+        using var handler = new RecordingHandler(_ => JsonResponse("{}"));
+        using var client = CreateClient(handler);
+        var service = new DokployApplicationService(client, new DokployProjectService(client));
+
+        await service.ConfigureStatefulRolloutPolicyAsync(
+            new DokployApplication { Id = "api-app", Name = "api", AppName = "api-generated" },
+            new ContainerResource("api", "api:latest"),
+            CancellationToken.None);
+
+        Assert.Empty(handler.Requests);
+    }
+
     [Fact]
     public async Task EnsureApplicationMountsAsync_UsesPersistedMountsAndRemovesDuplicateTarget()
     {

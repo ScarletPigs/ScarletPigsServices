@@ -115,19 +115,36 @@ internal sealed class DokployEnvironmentProvisioner : IDokployEnvironmentProvisi
             await applicationService.ConfigureApplicationAsync(app.Application, projectName, app.Resource, context.ExecutionContext, applicationHostsByResource, context.CancellationToken);
         }
 
-        var deploymentBaselines = new List<(IComputeResource Resource, DokployApplication Application, HashSet<string> ExistingTaskIds)>();
-        foreach (var app in applications)
-        {
-            var existingTaskIds = await applicationService.DeployApplicationAsync(app.Application, app.Resource, context.CancellationToken);
-            deploymentBaselines.Add((app.Resource, app.Application, existingTaskIds));
-        }
+        var applicationsByResourceName = applications.ToDictionary(
+            app => app.Resource.Name,
+            StringComparer.OrdinalIgnoreCase);
+        var deploymentBatches = DokployDeploymentPlanner.CreateBatches(
+            applications.Select(app => app.Resource).ToList());
 
-        await Task.WhenAll(deploymentBaselines.Select(app =>
-            applicationService.VerifyApplicationDeploymentAsync(
-                app.Application,
-                app.Resource,
-                app.ExistingTaskIds,
-                context.CancellationToken)));
+        foreach (var deploymentBatch in deploymentBatches)
+        {
+            context.Logger.LogInformation(
+                "Deploying and verifying Dokploy resource batch: {ResourceNames}.",
+                string.Join(", ", deploymentBatch.Select(resource => resource.Name)));
+
+            var deploymentBaselines = new List<(IComputeResource Resource, DokployApplication Application, HashSet<string> ExistingTaskIds)>();
+            foreach (var resourceToDeploy in deploymentBatch)
+            {
+                var app = applicationsByResourceName[resourceToDeploy.Name];
+                var existingTaskIds = await applicationService.DeployApplicationAsync(
+                    app.Application,
+                    app.Resource,
+                    context.CancellationToken);
+                deploymentBaselines.Add((app.Resource, app.Application, existingTaskIds));
+            }
+
+            await Task.WhenAll(deploymentBaselines.Select(app =>
+                applicationService.VerifyApplicationDeploymentAsync(
+                    app.Application,
+                    app.Resource,
+                    app.ExistingTaskIds,
+                    context.CancellationToken)));
+        }
     }
 }
 #pragma warning restore ASPIREPIPELINES001

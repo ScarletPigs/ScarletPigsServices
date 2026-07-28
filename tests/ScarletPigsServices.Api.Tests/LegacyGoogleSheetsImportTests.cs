@@ -12,6 +12,27 @@ namespace ScarletPigsServices.Api.Tests;
 public sealed class LegacyGoogleSheetsImportTests
 {
     [Fact]
+    public void WorksheetResolver_UsesNamesRegardlessOfTabOrder()
+    {
+        var result = LegacyGoogleSheetsWorksheetResolver.Resolve(
+            ["DLC Info", "Other Sheet", "Old Ops", "Active Schedule"]);
+
+        Assert.Equal("Active Schedule", result.ActiveSchedule);
+        Assert.Equal("DLC Info", result.DlcInfo);
+        Assert.Equal("Old Ops", result.OldOps);
+    }
+
+    [Fact]
+    public void WorksheetResolver_ReportsMissingRequiredSheet()
+    {
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => LegacyGoogleSheetsWorksheetResolver.Resolve(
+                ["Active Schedule", "DLC Info"]));
+
+        Assert.Contains("Old Ops", exception.Message);
+    }
+
+    [Fact]
     public void Parser_ReadsSettingsAndBothOperationWorksheets()
     {
         IReadOnlyList<IReadOnlyList<string>> schedule =

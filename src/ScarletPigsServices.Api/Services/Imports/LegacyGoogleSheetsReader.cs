@@ -63,23 +63,15 @@ public sealed class LegacyGoogleSheetsReader(
         var spreadsheet = await sheets.Spreadsheets
             .Get(spreadsheetId)
             .ExecuteAsync(cancellationToken);
-        var worksheetTitles = spreadsheet.Sheets
-            .OrderBy(sheet => sheet.Properties.Index)
-            .Select(sheet => sheet.Properties.Title)
-            .Take(3)
-            .ToArray();
-        if (worksheetTitles.Length < 3)
-        {
-            throw new InvalidOperationException(
-                "The legacy workbook must contain schedule, archive, and DLC worksheets.");
-        }
+        var worksheetTitles = LegacyGoogleSheetsWorksheetResolver.Resolve(
+            spreadsheet.Sheets.Select(sheet => sheet.Properties.Title));
 
         var scheduleRows = await ReadWorksheetAsync(
-            sheets, spreadsheetId, worksheetTitles[0], cancellationToken);
+            sheets, spreadsheetId, worksheetTitles.ActiveSchedule, cancellationToken);
         var archiveRows = await ReadWorksheetAsync(
-            sheets, spreadsheetId, worksheetTitles[1], cancellationToken);
+            sheets, spreadsheetId, worksheetTitles.OldOps, cancellationToken);
         var questionnaireRows = await ReadWorksheetAsync(
-            sheets, spreadsheetId, worksheetTitles[2], cancellationToken);
+            sheets, spreadsheetId, worksheetTitles.DlcInfo, cancellationToken);
         return LegacyGoogleSheetsParser.Parse(
             scheduleRows, archiveRows, questionnaireRows);
     }
@@ -154,6 +146,37 @@ public sealed class LegacyGoogleSheetsReader(
             throw new InvalidOperationException(
                 "GoogleSheetsImport:SpreadsheetName or SpreadsheetId must be configured.");
         }
+    }
+}
+
+internal sealed record LegacyGoogleSheetsWorksheetTitles(
+    string ActiveSchedule,
+    string DlcInfo,
+    string OldOps);
+
+internal static class LegacyGoogleSheetsWorksheetResolver
+{
+    public const string ActiveSchedule = "Active Schedule";
+    public const string DlcInfo = "DLC Info";
+    public const string OldOps = "Old Ops";
+
+    public static LegacyGoogleSheetsWorksheetTitles Resolve(
+        IEnumerable<string> worksheetTitles)
+    {
+        var available = worksheetTitles.ToHashSet(StringComparer.Ordinal);
+        var missing = new[] { ActiveSchedule, DlcInfo, OldOps }
+            .Where(title => !available.Contains(title))
+            .ToArray();
+        if (missing.Length > 0)
+        {
+            throw new InvalidOperationException(
+                $"The legacy workbook is missing required worksheets: {string.Join(", ", missing)}.");
+        }
+
+        return new LegacyGoogleSheetsWorksheetTitles(
+            ActiveSchedule,
+            DlcInfo,
+            OldOps);
     }
 }
 

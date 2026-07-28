@@ -57,7 +57,8 @@ scheme and enter the configured key to call endpoints from the UI.
 Call `POST /api/admin/imports/google-sheets` with the normal `X-API-Key` header
 to import the legacy workbook. The endpoint imports Piglet settings,
 questionnaire data, current operations, and archived operations in one database
-transaction.
+transaction. It reads the worksheets named `Active Schedule`, `DLC Info`, and
+`Old Ops`; their tab order does not matter.
 
 ```bash
 curl -X POST \

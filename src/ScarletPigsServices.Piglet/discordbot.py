@@ -5,8 +5,6 @@ from github import Github
 import datetime
 import discord
 import schedule
-import scarletpigsapi
-import logging
 import asyncio
 import os
 import xlsxwriter
@@ -266,26 +264,18 @@ class DateSelect(discord.ui.Select):
                              icon_url=interaction.user.display_avatar)
             content = "No date picked."
         else:
-            schedule.update_op(self.values[0], self.opname, self.opauthor)
+            schedule.update_op(
+                self.values[0],
+                self.opname,
+                self.opauthor,
+                author_discord_id=interaction.user.id,
+            )
             embed = discord.Embed(title="Reserved a Sunday", description=f"Op named {self.opname} made by {
                                   self.opauthor} is booked for {self.values[0]}.", timestamp=datetime.datetime.utcnow(), color=discord.Colour.blue())
             embed.set_author(name=interaction.user,
                              icon_url=interaction.user.display_avatar)
             content = "Date picked."
 
-            # Add event to the API
-            starttime = datetime.datetime.strptime(
-                self.values[0], "%b %d (%y)").replace(hour=15, minute=0, second=0)
-            endtime = datetime.datetime.strptime(
-                self.values[0], "%b %d (%y)").replace(hour=18, minute=0, second=0)
-            description = f"Op made by {self.opauthor}"
-            authorid = interaction.user.id
-            # Try API, fallback to just updating schedule
-            try:
-                scarletpigsapi.create_event(
-                    self.opname, description, self.opauthor, authorid, starttime, endtime)
-            except Exception as e:
-                print(e)
         await update_scheduled_messages("schedule", schedule.get_schedule_messages())
         await interaction.edit_original_response(content=content, embed=embed, view=None)
 
@@ -311,18 +301,6 @@ class OpEditSelect(discord.ui.Select):
             return
         if (self.isDelete):
             op_date = op[0]
-            try:
-                dt = datetime.datetime.strptime(
-                    op_date, "%b %d (%y)").replace(hour=16, minute=0, second=0)
-            except Exception:
-                await interaction.response.send_message(content="Invalid op date format.", ephemeral=True)
-                return
-            event = scarletpigsapi.get_event_at_date(dt)
-            if not event or "id" not in event:
-                await interaction.response.send_message(content="Could not find event to delete.", ephemeral=True)
-                return
-            event_id = event["id"]
-            scarletpigsapi.delete_event(event_id)
             schedule.delete_op(op_date)
             await interaction.response.send_message(content=f"Op {op[1]} deleted", ephemeral=True)
         else:
@@ -347,19 +325,6 @@ class OpEditModal(discord.ui.Modal, title="Edit an op"):
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer()
         schedule.update_op(self.date, self.opname.value, self.author.value)
-
-        # Try API, fallback to just updating schedule
-        try:
-            isodate = datetime.datetime.strptime(
-                self.date, "%b %d (%y)").replace(hour=16, minute=0, second=0)
-        except Exception:
-            await interaction.followup.send(content="Invalid date format for event.", ephemeral=True)
-            return
-        event = try_api_call(scarletpigsapi.get_event_at_date, isodate)
-        if event:
-            event["name"] = self.opname.value
-            event["description"] = f"Op made by {self.author.value}"
-            try_api_call(scarletpigsapi.edit_event, event)
 
         await schedule_loop()
         embed = discord.Embed(title="Edited a Sunday", description=f"Op named {self.opname.value} made by {
@@ -859,13 +824,3 @@ async def loop_tasks():
     if (i % 60) == 0:
         await schedule_loop()
         await activity_loop()
-
-# Utility: fallback API call wrapper
-
-
-def try_api_call(api_func, *args, **kwargs):
-    try:
-        return api_func(*args, **kwargs)
-    except Exception as e:
-        logging.error(f"API call failed: {e}")
-        return None

@@ -52,6 +52,29 @@ The composite-key collections use both key values in their item routes:
 Swagger is available at `/swagger` in Development. Select the `ApiKey` security
 scheme and enter the configured key to call endpoints from the UI.
 
+## Manual legacy import
+
+Call `POST /api/admin/imports/google-sheets` with the normal `X-API-Key` header
+to import the legacy workbook. The endpoint imports Piglet settings,
+questionnaire data, current operations, and archived operations in one database
+transaction.
+
+```bash
+curl -X POST \
+  -H "X-API-Key: $SCARLETPIGS_API_KEY" \
+  https://api.scarletpigs.com/api/admin/imports/google-sheets
+```
+
+On success it writes the `piglet.google_sheets_import` app-setting and returns
+event import/skip counts. Later calls return `already_completed` without
+contacting Google. To deliberately rerun the import, first delete that marker
+through `DELETE /api/app-settings/piglet.google_sheets_import`.
+
+The AppHost maps the existing Google service-account parameters to the
+`GoogleSheetsImport` configuration section on the API. `SpreadsheetName` is
+resolved through Google Drive; `GoogleSheetsImport__SpreadsheetId` can instead
+be configured directly when workbook names are ambiguous.
+
 ## Database lifecycle
 
 The migration history is intentionally a new baseline and requires a fresh

@@ -307,6 +307,8 @@ public static class LegacyGoogleSheetsImportPlanner
         var local = DateTime.SpecifyKind(
             date.ToDateTime(new TimeOnly(15, 0)),
             DateTimeKind.Unspecified);
-        return new DateTimeOffset(local, EventTimeZone.GetUtcOffset(local));
+        return new DateTimeOffset(
+            local,
+            EventTimeZone.GetUtcOffset(local)).ToUniversalTime();
     }
 }

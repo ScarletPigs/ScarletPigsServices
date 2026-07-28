@@ -31,7 +31,7 @@ jobs:
       Parameters__scarletpigs-registry-password: ${{ secrets.DOKPLOY_REGISTRY_PASSWORD }}
       Parameters__dbserver-password: ${{ secrets.DBSERVER_PASSWORD }}
 
-      # Piglet, API, FTP, and Google service account configuration
+      # Piglet, API, and FTP configuration
       DISCORDTOKEN: ${{ secrets.DISCORDTOKEN }}
       DISCORDCLIENTID: ${{ secrets.DISCORDCLIENTID }}
       DISCORDCLIENTSECRET: ${{ secrets.DISCORDCLIENTSECRET }}
@@ -52,17 +52,6 @@ jobs:
       API_KEY: ${{ secrets.API_KEY }}
       OCAP_SECRET: ${{ secrets.OCAP_SECRET }}
       OCAP_AUTH_ADMINSTEAMIDS: ${{ secrets.OCAP_AUTH_ADMINSTEAMIDS }}
-      GOOGLE_SHEET_NAME: ${{ secrets.GOOGLE_SHEET_NAME }}
-      TYPE: ${{ secrets.TYPE }}
-      PROJECT_ID: ${{ secrets.PROJECT_ID }}
-      PRIVATE_KEY_ID: ${{ secrets.PRIVATE_KEY_ID }}
-      PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
-      CLIENT_EMAIL: ${{ secrets.CLIENT_EMAIL }}
-      CLIENT_ID: ${{ secrets.CLIENT_ID }}
-      AUTH_URI: ${{ secrets.AUTH_URI }}
-      TOKEN_URI: ${{ secrets.TOKEN_URI }}
-      AUTH_PROVIDER_X509_CERT_URL: ${{ secrets.AUTH_PROVIDER_X509_CERT_URL }}
-      CLIENT_X509_CERT_URL: ${{ secrets.CLIENT_X509_CERT_URL }}
 
     steps:
       - name: Check out repository
@@ -125,17 +114,6 @@ jobs:
             API_KEY
             OCAP_SECRET
             OCAP_AUTH_ADMINSTEAMIDS
-            GOOGLE_SHEET_NAME
-            TYPE
-            PROJECT_ID
-            PRIVATE_KEY_ID
-            PRIVATE_KEY
-            CLIENT_EMAIL
-            CLIENT_ID
-            AUTH_URI
-            TOKEN_URI
-            AUTH_PROVIDER_X509_CERT_URL
-            CLIENT_X509_CERT_URL
           )
 
           missing=()

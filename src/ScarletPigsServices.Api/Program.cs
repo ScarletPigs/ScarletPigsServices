@@ -6,7 +6,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
 using ScarletPigsServices.Api.Authentication;
 using ScarletPigsServices.Api.Services.Files;
-using ScarletPigsServices.Api.Services.Imports;
 using ScarletPigsServices.Api.Services.Workshop;
 using ScarletPigsServices.Data;
 using ScarletPigsServices.Data.Models;
@@ -65,13 +64,6 @@ namespace ScarletPigsServices.Api
                     .MapEnum<ModSide>("mod_side")
                     .MapEnum<OverrideMode>("override_mode")));
             builder.Services.AddSingleton<IHavocFileService, HavocFileService>();
-            builder.Services
-                .AddOptions<GoogleSheetsImportOptions>()
-                .Bind(builder.Configuration.GetSection(GoogleSheetsImportOptions.SectionName));
-            builder.Services.AddScoped<ILegacyGoogleSheetsReader, LegacyGoogleSheetsReader>();
-            builder.Services.AddScoped<
-                ILegacyGoogleSheetsImportService,
-                LegacyGoogleSheetsImportService>();
             builder.Services.AddHttpClient<ISteamWorkshopService, SteamWorkshopService>(client =>
             {
                 client.BaseAddress = new Uri("https://api.steampowered.com/");

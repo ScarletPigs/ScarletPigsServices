@@ -18,7 +18,9 @@ public abstract class DataControllerBase<TEntity, TKey>(
     private static readonly IReadOnlyDictionary<string, PropertyInfo> WritableProperties =
         typeof(TEntity)
             .GetProperties(BindingFlags.Instance | BindingFlags.Public)
-            .Where(property => property.CanWrite)
+            .Where(property =>
+                property.CanWrite
+                && property.GetCustomAttribute<JsonIgnoreAttribute>() is null)
             .ToDictionary(
                 property => property.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name
                     ?? JsonNamingPolicy.SnakeCaseLower.ConvertName(property.Name),

@@ -107,6 +107,7 @@ public sealed class ScarletPigsDbContext(DbContextOptions<ScarletPigsDbContext> 
             entity.ToTable("events");
             entity.HasKey(item => item.Id);
             entity.Property(item => item.Id).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(item => item.AarLookupLastAttemptAt).HasColumnName("aar_lookup_last_attempt_at");
             entity.Property(item => item.Author).HasDefaultValue(string.Empty);
             entity.Property(item => item.DurationMinutes).HasDefaultValue(0);
             entity.Property(item => item.Metadata).HasColumnType("jsonb").HasDefaultValueSql("'{}'::jsonb");

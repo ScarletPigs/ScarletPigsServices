@@ -52,6 +52,42 @@ The composite-key collections use both key values in their item routes:
 Swagger is available at `/swagger` in Development. Select the `ApiKey` security
 scheme and enter the configured key to call endpoints from the UI.
 
+## OCAP read-through API
+
+Authenticated clients can read OCAP resources through
+`GET /api/ocap/{ocap-path}`. The API streams OCAP's status, headers, and body
+without buffering large recording files. Supported upstream paths are:
+
+- `/api/healthcheck`, `/api/version`, and `/api/v1/customize`;
+- `/api/v1/operations` and its read-only child routes;
+- `/api/v1/worlds`;
+- `/data/*` recording manifests, chunks, and legacy JSON recordings;
+- `/images/*` maps, markers, fonts, and sprites.
+
+For example, `GET /api/ocap/api/v1/operations` returns OCAP's recording
+catalogue. Authentication, upload, administration, and live-stream endpoints
+are deliberately not proxied.
+
+The AppHost supplies OCAP service discovery to the API. Outside the AppHost,
+configure the `http://ocap` service-discovery endpoint and set
+`Ocap:PublicBaseUrl` to the browser-facing OCAP base URL.
+
+## Automatic event AAR linking
+
+The API checks events whose `type_key` is `operation` when their `starts_at`
+time arrives. It retries once per hour for five hours. Each completed protobuf
+recording's manifest supplies its actual UTC start time; the catalogue's
+mission duration supplies its end time. The recording with the greatest
+overlap with the event timeslot is linked at:
+
+```text
+{Ocap:PublicBaseUrl}/recording/{recording-id}/{filename}
+```
+
+The resulting URL is stored in the event's `aar_url`. Attempts stop immediately
+after a match. The last-attempt timestamp is persisted but excluded from the
+JSON contract, allowing retries to retain their cadence across API restarts.
+
 ## Database lifecycle
 
 The migration history is intentionally a new baseline and requires a fresh

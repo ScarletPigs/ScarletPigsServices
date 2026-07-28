@@ -12,5 +12,6 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Ridder.Hosting.Dokploy.Tests/Ridder.Hosting.Dokploy.Tests.csproj" />
+    <Project Path="tests/ScarletPigsServices.Api.Tests/ScarletPigsServices.Api.Tests.csproj" />
   </Folder>
 </Solution>

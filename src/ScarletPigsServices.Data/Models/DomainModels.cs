@@ -82,6 +82,8 @@ public sealed class EventType
 public sealed class Event
 {
     public Guid Id { get; set; } = Guid.NewGuid();
+    [JsonIgnore]
+    public DateTimeOffset? AarLookupLastAttemptAt { get; set; }
     public string? AarUrl { get; set; }
     public int? AttendanceCount { get; set; }
     public string Author { get; set; } = string.Empty;

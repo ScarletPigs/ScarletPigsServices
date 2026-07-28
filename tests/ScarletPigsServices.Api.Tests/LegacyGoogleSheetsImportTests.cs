@@ -84,7 +84,15 @@ public sealed class LegacyGoogleSheetsImportTests
         Assert.Equal("Archived op", imported.Name);
         Assert.Equal("Bob", imported.Author);
         Assert.Equal("piglet-google-sheets:2026-07-26", imported.ExternalId);
-        Assert.Equal(TimeSpan.FromHours(2), imported.StartsAt.Offset);
+        Assert.Equal(TimeSpan.Zero, imported.StartsAt.Offset);
+        Assert.Equal(
+            new DateTimeOffset(2026, 7, 26, 13, 0, 0, TimeSpan.Zero),
+            imported.StartsAt);
+        Assert.Equal(
+            new DateTime(2026, 7, 26, 15, 0, 0),
+            TimeZoneInfo.ConvertTime(
+                imported.StartsAt,
+                TimeZoneInfo.FindSystemTimeZoneById("Europe/Copenhagen")).DateTime);
     }
 
     [Fact]

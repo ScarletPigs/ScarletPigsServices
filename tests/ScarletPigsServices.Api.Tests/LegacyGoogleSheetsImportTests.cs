@@ -1,4 +1,9 @@
+using System.Text.Json;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using ScarletPigsServices.Api.Services.Imports;
+using ScarletPigsServices.Data;
 using ScarletPigsServices.Data.Models;
 using Xunit;
 
@@ -59,5 +64,84 @@ public sealed class LegacyGoogleSheetsImportTests
         Assert.Equal("Bob", imported.Author);
         Assert.Equal("piglet-google-sheets:2026-07-26", imported.ExternalId);
         Assert.Equal(TimeSpan.FromHours(2), imported.StartsAt.Offset);
+    }
+
+    [Fact]
+    public async Task Service_RunsRelationalTransactionInsideExecutionStrategy()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        var modelOptions = new DbContextOptionsBuilder<TestModelContext>()
+            .UseSqlite(connection)
+            .Options;
+        await using var modelContext = new TestModelContext(modelOptions);
+        await modelContext.Database.EnsureCreatedAsync();
+        var options = new DbContextOptionsBuilder<ScarletPigsDbContext>()
+            .UseSqlite(connection)
+            .UseModel(modelContext.Model)
+            .ReplaceService<IExecutionStrategyFactory, RetryingExecutionStrategyFactory>()
+            .Options;
+        await using var db = new ScarletPigsDbContext(options);
+        var reader = new FakeReader(new LegacyGoogleSheetsData(
+            10,
+            JsonSerializer.SerializeToElement(new { servers = Array.Empty<object>() }),
+            JsonSerializer.SerializeToElement(new { servers = Array.Empty<object>() }),
+            null,
+            [],
+            [new LegacyOperation("Aug 02 (26)", "Current op", "Alice", "schedule")]));
+        var service = new LegacyGoogleSheetsImportService(db, reader);
+
+        var result = await service.ImportAsync(CancellationToken.None);
+
+        Assert.Equal("completed", result.Status);
+        Assert.Equal(1, result.EventsImported);
+        Assert.True(await db.AppSettings.AnyAsync(
+            setting => setting.Key == LegacyGoogleSheetsImportService.ImportMarkerKey));
+    }
+
+    private sealed class FakeReader(LegacyGoogleSheetsData data)
+        : ILegacyGoogleSheetsReader
+    {
+        public Task<LegacyGoogleSheetsData> ReadAsync(
+            CancellationToken cancellationToken) =>
+            Task.FromResult(data);
+    }
+
+    private sealed class RetryingExecutionStrategyFactory(
+        ExecutionStrategyDependencies dependencies) : IExecutionStrategyFactory
+    {
+        public IExecutionStrategy Create() =>
+            new RetryingExecutionStrategy(dependencies);
+    }
+
+    private sealed class RetryingExecutionStrategy(
+        ExecutionStrategyDependencies dependencies)
+        : ExecutionStrategy(dependencies, 1, TimeSpan.Zero)
+    {
+        protected override bool ShouldRetryOn(Exception exception) => false;
+    }
+
+    private sealed class TestModelContext(
+        DbContextOptions<TestModelContext> options) : DbContext(options)
+    {
+        protected override void OnModelCreating(ModelBuilder builder)
+        {
+            builder.Entity<AppSetting>(entity =>
+            {
+                entity.HasKey(item => item.Key);
+                entity.Property(item => item.Value).HasConversion(
+                    document => document.RootElement.GetRawText(),
+                    json => JsonDocument.Parse(json, default(JsonDocumentOptions)));
+            });
+            builder.Entity<Capability>(entity => entity.HasKey(item => item.Key));
+            builder.Entity<EventType>(entity => entity.HasKey(item => item.Key));
+            builder.Entity<Event>(entity =>
+            {
+                entity.HasKey(item => item.Id);
+                entity.Property(item => item.Metadata).HasConversion(
+                    document => document.RootElement.GetRawText(),
+                    json => JsonDocument.Parse(json, default(JsonDocumentOptions)));
+            });
+        }
     }
 }

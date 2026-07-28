@@ -30,18 +30,6 @@ var SERVER_PORT = builder.AddParameterFromConfiguration("server-port", "SERVER_P
 var API_KEY = builder.AddParameterFromConfiguration("api-key", "API_KEY", true).WithDescription("At least 32 random bytes used to authenticate requests to the Scarlet Pigs API.");
 var OCAP_SECRET = builder.AddParameterFromConfiguration("ocap-secret", "OCAP_SECRET", true).WithDescription("Shared secret used to authenticate OCAP recording uploads and sign admin sessions.");
 var OCAP_ADMIN_STEAM_IDS = builder.AddParameterFromConfiguration("ocap-admin-steam-ids", "OCAP_AUTH_ADMINSTEAMIDS", false).WithDescription("Comma-separated Steam64 IDs authorized to access the OCAP administration pages.");
-// Legacy Google credentials are used only by the manual API import endpoint.
-var GOOGLE_SHEET_NAME = builder.AddParameterFromConfiguration("google-sheet-name", "GOOGLE_SHEET_NAME", true).WithDescription("Legacy workbook name used by the API's manual Google Sheets import.");
-var TYPE = builder.AddParameterFromConfiguration("type", "TYPE", true).WithDescription("Google service account credential type used by the API import.");
-var PROJECT_ID = builder.AddParameterFromConfiguration("project-id", "PROJECT_ID", true).WithDescription("Google Cloud project ID used by the API import.");
-var PRIVATE_KEY_ID = builder.AddParameterFromConfiguration("private-key-id", "PRIVATE_KEY_ID", true).WithDescription("Google service account private key identifier used by the API import.");
-var PRIVATE_KEY = builder.AddParameterFromConfiguration("private-key", "PRIVATE_KEY", true).WithDescription("Google service account private key used by the API import.");
-var CLIENT_EMAIL = builder.AddParameterFromConfiguration("client-email", "CLIENT_EMAIL", true).WithDescription("Google service account client email used by the API import.");
-var CLIENT_ID = builder.AddParameterFromConfiguration("client-id", "CLIENT_ID", true).WithDescription("Google service account client ID used by the API import.");
-var AUTH_URI = builder.AddParameterFromConfiguration("auth-uri", "AUTH_URI", true).WithDescription("Google service account authorization URI used by the API import.");
-var TOKEN_URI = builder.AddParameterFromConfiguration("token-uri", "TOKEN_URI", true).WithDescription("Google service account token URI used by the API import.");
-var AUTH_PROVIDER_X509_CERT_URL = builder.AddParameterFromConfiguration("auth-provider-x509-cert-url", "AUTH_PROVIDER_X509_CERT_URL", true).WithDescription("Google auth provider certificate URL used by the API import.");
-var CLIENT_X509_CERT_URL = builder.AddParameterFromConfiguration("client-x509-cert-url", "CLIENT_X509_CERT_URL", true).WithDescription("Google service account certificate URL used by the API import.");
 
 
 
@@ -74,17 +62,6 @@ var apiService = builder.AddProject<Projects.ScarletPigsServices_Api>(ServiceRef
     .WithEnvironment("HAVOC_HEADLESS_FTP_USER", HAVOC_HEADLESS_FTP_USER)
     .WithEnvironment("HAVOC_HEADLESS_FTP_PASSWORD", HAVOC_HEADLESS_FTP_PASSWORD)
     .WithEnvironment("HAVOC_HEADLESS_FTP_ROOT", HAVOC_HEADLESS_FTP_ROOT)
-    .WithEnvironment("GoogleSheetsImport__SpreadsheetName", GOOGLE_SHEET_NAME)
-    .WithEnvironment("GoogleSheetsImport__Type", TYPE)
-    .WithEnvironment("GoogleSheetsImport__ProjectId", PROJECT_ID)
-    .WithEnvironment("GoogleSheetsImport__PrivateKeyId", PRIVATE_KEY_ID)
-    .WithEnvironment("GoogleSheetsImport__PrivateKey", PRIVATE_KEY)
-    .WithEnvironment("GoogleSheetsImport__ClientEmail", CLIENT_EMAIL)
-    .WithEnvironment("GoogleSheetsImport__ClientId", CLIENT_ID)
-    .WithEnvironment("GoogleSheetsImport__AuthUri", AUTH_URI)
-    .WithEnvironment("GoogleSheetsImport__TokenUri", TOKEN_URI)
-    .WithEnvironment("GoogleSheetsImport__AuthProviderX509CertUrl", AUTH_PROVIDER_X509_CERT_URL)
-    .WithEnvironment("GoogleSheetsImport__ClientX509CertUrl", CLIENT_X509_CERT_URL)
     .WithReference(scarletpigsDb)
     .PublishToDokploy(dokploy, options => options
         .WithDomain("http", "api.scarletpigs.com")

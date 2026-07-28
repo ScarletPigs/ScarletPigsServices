@@ -15,9 +15,25 @@ import emoji as emoji_lib
 # Github setup
 gh = Github(login_or_token=os.getenv("GITHUB_TOKEN"))
 
+_schedule_api_lock = asyncio.Lock()
+
 ########################
 ### Helper functions ###
 ########################
+
+
+async def run_schedule(function, *args, **kwargs):
+    """Run synchronous API-backed schedule work without blocking Discord."""
+    async with _schedule_api_lock:
+        return await asyncio.to_thread(function, *args, **kwargs)
+
+
+def query_server_status(server_ip: str, server_port: int) -> tuple[int, str]:
+    """Query the game server outside the Discord event loop."""
+    with A2SQuery(server_ip, server_port, timeout=7) as a2s:
+        info = a2s.info()
+        return info.players, info.game
+
 
 ### --- Discord reaction related functions --- ###
 
@@ -224,7 +240,8 @@ class SPiglet(discord.Client):
                 print(f"Syncing {com.name}")
             await TREE.sync()
             self.synced = True
-        loop_tasks.start()
+        if not loop_tasks.is_running():
+            loop_tasks.start()
 
     async def on_command_error(self, ctx, error):
         await ctx.reply(str(error), ephemeral=True)
@@ -241,10 +258,9 @@ TREE = app_commands.CommandTree(BOT)
 
 # Define the reserve sunday Select
 class DateSelect(discord.ui.Select):
-    def __init__(self, opname, opauthor):
+    def __init__(self, opname, opauthor, next_sundays):
         self.opname = opname
         self.opauthor = opauthor
-        next_sundays = schedule.get_free_dates()
         options = []
         if len(next_sundays) == 0:
             options.append(discord.SelectOption(
@@ -264,7 +280,8 @@ class DateSelect(discord.ui.Select):
                              icon_url=interaction.user.display_avatar)
             content = "No date picked."
         else:
-            schedule.update_op(
+            await run_schedule(
+                schedule.update_op,
                 self.values[0],
                 self.opname,
                 self.opauthor,
@@ -276,18 +293,19 @@ class DateSelect(discord.ui.Select):
                              icon_url=interaction.user.display_avatar)
             content = "Date picked."
 
-        await update_scheduled_messages("schedule", schedule.get_schedule_messages())
+        messages = await run_schedule(schedule.get_schedule_messages)
+        await update_scheduled_messages("schedule", messages)
         await interaction.edit_original_response(content=content, embed=embed, view=None)
 
 # Define the edit op Select
 
 
 class OpEditSelect(discord.ui.Select):
-    def __init__(self, isDelete: bool = False):
+    def __init__(self, booked_ops, isDelete: bool = False):
         self.isDelete = isDelete
-        next_booked_ops = schedule.get_booked_dates()
+        self.booked_ops = {booked_op[0]: booked_op for booked_op in booked_ops}
         options = []
-        for booked_op in next_booked_ops:
+        for booked_op in booked_ops:
             opname = booked_op[1]
             opdate = booked_op[0]
             options.append(discord.SelectOption(label=opname, value=opdate))
@@ -295,14 +313,15 @@ class OpEditSelect(discord.ui.Select):
                          min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
-        op = schedule.get_op_data(date=self.values[0])
+        op = self.booked_ops.get(self.values[0])
         if op is None or len(op) < 3:
             await interaction.response.send_message(content="Could not find op data.", ephemeral=True)
             return
         if (self.isDelete):
             op_date = op[0]
-            schedule.delete_op(op_date)
-            await interaction.response.send_message(content=f"Op {op[1]} deleted", ephemeral=True)
+            await interaction.response.defer(ephemeral=True)
+            await run_schedule(schedule.delete_op, op_date)
+            await interaction.followup.send(content=f"Op {op[1]} deleted", ephemeral=True)
         else:
             await interaction.response.send_modal(OpEditModal(op[0], op[1], op[2]))
 
@@ -324,7 +343,12 @@ class OpEditModal(discord.ui.Modal, title="Edit an op"):
 
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer()
-        schedule.update_op(self.date, self.opname.value, self.author.value)
+        await run_schedule(
+            schedule.update_op,
+            self.date,
+            self.opname.value,
+            self.author.value,
+        )
 
         await schedule_loop()
         embed = discord.Embed(title="Edited a Sunday", description=f"Op named {self.opname.value} made by {
@@ -392,8 +416,9 @@ async def send(interaction: Interaction, message: str):
 @app_commands.checks.has_role("Mission Maker")
 async def reservesunday(interaction: discord.Interaction, opname: str, authorname: str):
     await interaction.response.defer(ephemeral=True)
+    free_dates = await run_schedule(schedule.get_free_dates)
     view = discord.ui.View(timeout=180).add_item(
-        DateSelect(opname, authorname))
+        DateSelect(opname, authorname, free_dates))
     await interaction.followup.send(content="Reserved an op. Now pick the date: ", view=view)
 
 # Register the edit op command
@@ -403,7 +428,14 @@ async def reservesunday(interaction: discord.Interaction, opname: str, authornam
 @app_commands.checks.has_role("Mission Maker")
 async def editsunday(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
-    view = discord.ui.View(timeout=180).add_item(OpEditSelect())
+    booked_ops = await run_schedule(schedule.get_booked_dates)
+    if not booked_ops:
+        await interaction.followup.send(
+            content="There are no booked operations to edit.",
+            ephemeral=True,
+        )
+        return
+    view = discord.ui.View(timeout=180).add_item(OpEditSelect(booked_ops))
     await interaction.followup.send(content="Which op do you want to edit? ", view=view)
 
 
@@ -414,7 +446,15 @@ async def editsunday(interaction: discord.Interaction):
 @app_commands.checks.has_role("Mission Maker")
 async def deletesunday(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
-    view = discord.ui.View(timeout=180).add_item(OpEditSelect(isDelete=True))
+    booked_ops = await run_schedule(schedule.get_booked_dates)
+    if not booked_ops:
+        await interaction.followup.send(
+            content="There are no booked operations to delete.",
+            ephemeral=True,
+        )
+        return
+    view = discord.ui.View(timeout=180).add_item(
+        OpEditSelect(booked_ops, isDelete=True))
     await interaction.followup.send(content="Which op do you want to delete? ", view=view)
 
 
@@ -430,7 +470,7 @@ async def createschedule(interaction: discord.Interaction):
     if channel is None or not hasattr(channel, 'send'):
         await interaction.followup.send(content="Could not resolve channel to send schedule.", ephemeral=True)
         return
-    schedule_messages = schedule.get_schedule_messages()
+    schedule_messages = await run_schedule(schedule.get_schedule_messages)
     guild_ids = [server['guild_id'] for server in schedule_messages['servers']]
 
     if (guild_id in guild_ids):
@@ -444,11 +484,17 @@ async def createschedule(interaction: discord.Interaction):
             except Exception:
                 print("Couldn't delete old message")
 
-    new_msg = await channel.send(content=format_schedule_message())
+    schedule_content = await run_schedule(format_schedule_message)
+    new_msg = await channel.send(content=schedule_content)
     if guild_id is None or not hasattr(channel, 'id') or not hasattr(new_msg, 'id'):
         await interaction.followup.send(content="Could not resolve guild/channel/message id.", ephemeral=True)
         return
-    schedule.set_schedule_message_id(guild_id, channel.id, new_msg.id)
+    await run_schedule(
+        schedule.set_schedule_message_id,
+        guild_id,
+        channel.id,
+        new_msg.id,
+    )
     await interaction.followup.send(content="Op schedule created.")
 
 # Register the create modlist message command
@@ -463,7 +509,8 @@ async def createmodlist(interaction: discord.Interaction, repofilepath: str):
     if channel is None or not hasattr(channel, 'send'):
         await interaction.followup.send(content="Could not resolve channel to send modlist.", ephemeral=True)
         return
-    file_name = retrieve_file_from_github(repofilepath)
+    file_name = await asyncio.to_thread(
+        retrieve_file_from_github, repofilepath)
     if (file_name == None):
         await interaction.followup.send(content="Couldn't find the file. Make sure the file exists and the path is correct. (An example path format would be Modlists/ScarletBannerKAT.html)", ephemeral=True)
         return
@@ -472,7 +519,13 @@ async def createmodlist(interaction: discord.Interaction, repofilepath: str):
     if guild_id is None or not hasattr(channel, 'id') or not hasattr(msg, 'id'):
         await interaction.followup.send(content="Could not resolve guild/channel/message id.", ephemeral=True)
         return
-    schedule.add_modlist_message(guild_id, channel.id, msg.id, repofilepath)
+    await run_schedule(
+        schedule.add_modlist_message,
+        guild_id,
+        channel.id,
+        msg.id,
+        repofilepath,
+    )
     await interaction.followup.send(content="Modlist message created.", ephemeral=True)
 
 # Register the create questionnaire message command
@@ -487,7 +540,18 @@ async def createquestionnaire(interaction: discord.Interaction):
     if channel is None or not hasattr(channel, 'send'):
         await interaction.followup.send(content="Could not resolve channel to send questionnaire.", ephemeral=True)
         return
-    questionnaire_message = schedule.get_questionnaire_message()
+    dlcs = await run_schedule(schedule.get_questionnaire_info)
+    if len(dlcs) < 2:
+        await interaction.followup.send(
+            content=(
+                "No DLC questionnaire options are configured in the API "
+                f"setting `{schedule.QUESTIONNAIRE_INFO_KEY}`."
+            ),
+            ephemeral=True,
+        )
+        return
+    questionnaire_message = await run_schedule(
+        schedule.get_questionnaire_message)
     if (not questionnaire_message == None):
         # Check if the bot has access to the previous questionnaire message
         if ('guild_id' not in questionnaire_message or questionnaire_message['guild_id'] not in [guild.id for guild in BOT.guilds]):
@@ -502,8 +566,7 @@ async def createquestionnaire(interaction: discord.Interaction):
             except Exception:
                 print("Couldn't delete old message")
                 pass
-    dlcs = schedule.get_questionnaire_info()
-    msg_content = f"**The Scarlet Pigs DLC Questionnaire**\n\nPlease react to this message with the DLCs you have to allow the mission makers to better keep track of which DLCs they can make use of.\n\n*DLCs:*\n{format_dlc_list(dlcs)}\n\n\nResults: https://docs.google.com/spreadsheets/d/e/2PACX-1vQYrmXaRK5P-FatQKhgiy6SEmyTX2sqSBvBxKg5Oz-hTYZMgeh8fFqgRD__mdSn5gC-3LqVC3u02WFJ/pubchart?oid=653336303&format=interactive"
+    msg_content = f"**The Scarlet Pigs DLC Questionnaire**\n\nPlease react to this message with the DLCs you have to allow the mission makers to better keep track of which DLCs they can make use of.\n\n*DLCs:*\n{format_dlc_list(dlcs)}"
     new_msg = await channel.send(content=msg_content, embeds=[])
     await interaction.followup.send(content="DLC questionnaire created.", ephemeral=True)
     await asyncio.sleep(1)
@@ -517,7 +580,12 @@ async def createquestionnaire(interaction: discord.Interaction):
     if guild_id is None or not hasattr(channel, 'id') or not hasattr(new_msg, 'id'):
         await interaction.followup.send(content="Could not resolve guild/channel/message id.", ephemeral=True)
         return
-    schedule.set_questionnaire_message(guild_id, channel.id, new_msg.id)
+    await run_schedule(
+        schedule.set_questionnaire_message,
+        guild_id,
+        channel.id,
+        new_msg.id,
+    )
     await check_dlc_message()
 
 
@@ -631,21 +699,33 @@ async def edit_message(interaction: discord.Interaction, message: discord.Messag
 # Error message function
 async def error_response(interaction: discord.Interaction, message: str, expected: bool = True):
     try:
-        await interaction.response.send_message(content=message, ephemeral=True)
-    except Exception:
-        await interaction.followup.send(content=message, ephemeral=True)
-    finally:
-        if not expected:
-            creator_id = os.getenv('CREATOR_ID')
+        if interaction.response.is_done():
+            await interaction.followup.send(content=message, ephemeral=True)
+        else:
+            await interaction.response.send_message(
+                content=message,
+                ephemeral=True,
+            )
+    except discord.HTTPException as response_error:
+        print(f"Could not send command error response: {response_error}")
+
+    if not expected:
+        print(f"Unexpected app command error: {message}")
+        creator_id = os.getenv('CREATOR_ID')
+        try:
+            creator_id_int = int(
+                creator_id) if creator_id is not None else None
+        except (TypeError, ValueError):
+            creator_id_int = None
+        if creator_id_int:
             try:
-                creator_id_int = int(
-                    creator_id) if creator_id is not None else None
-            except Exception:
-                creator_id_int = None
-            if creator_id_int:
                 creator = await BOT.fetch_user(creator_id_int)
                 await creator.send(f"[{datetime.datetime.now()}] - {interaction.user} tried to use a command. Something went wrong! \n({message})")
-            raise Exception(message)
+            except discord.HTTPException as notification_error:
+                print(
+                    "Could not notify the bot creator about the command "
+                    f"error: {notification_error}"
+                )
 
 
 @TREE.error
@@ -679,14 +759,15 @@ async def update_scheduled_messages(category: str, messages: dict):
         # Check if the BOT has access to the message
         message_id = server['message_id']
         try:
-            if isinstance(channel, discord.TextChannel):
-                msg = await channel.fetch_message(message_id)
+            msg = await channel.fetch_message(message_id)
         except Exception:
             print(f'The {category} message for {getattr(guild, "name", "?")} in channel {getattr(channel, "name", "?")} could not be found! Removing it from the database.')
             if category == "schedule":
-                schedule.remove_schedule_message(message_id)
+                await run_schedule(
+                    schedule.remove_schedule_message, message_id)
             elif category == "modlist":
-                schedule.remove_modlist_message(message_id)
+                await run_schedule(
+                    schedule.remove_modlist_message, message_id)
             continue
         # Check if the BOT is the author of the message
         if not hasattr(msg, 'author') or not hasattr(BOT, 'user') or msg.author is None or BOT.user is None or msg.author.id != BOT.user.id:
@@ -695,10 +776,12 @@ async def update_scheduled_messages(category: str, messages: dict):
         print(
             f'Updating {category} for {getattr(guild, "name", "?")} in channel {getattr(channel, "name", "?")}')
         if category == "schedule":
-            await msg.edit(content=format_schedule_message())
+            content = await run_schedule(format_schedule_message)
+            await msg.edit(content=content)
         elif category == "modlist":
             file_path = server['file_path']
-            file_name = retrieve_file_from_github(file_path)
+            file_name = await asyncio.to_thread(
+                retrieve_file_from_github, file_path)
             await msg.edit(attachments=[discord.File(f"files/{file_name}")])
             os.remove(f"files/{file_name}")
 
@@ -706,11 +789,14 @@ async def update_scheduled_messages(category: str, messages: dict):
 
 
 async def check_dlc_message():
-    print('Updating DLC graph...')
-    questionnaire_message = schedule.get_questionnaire_message()
+    print('Updating DLC questionnaire state...')
+    questionnaire_message = await run_schedule(
+        schedule.get_questionnaire_message)
     if questionnaire_message is None or 'guild_id' not in questionnaire_message or 'channel_id' not in questionnaire_message or 'message_id' not in questionnaire_message:
         return
-    questionnaire_info = schedule.get_questionnaire_info()
+    questionnaire_info = await run_schedule(schedule.get_questionnaire_info)
+    if len(questionnaire_info) < 2:
+        return
     guild = BOT.get_guild(questionnaire_message['guild_id'])
     if guild is None:
         return
@@ -733,7 +819,10 @@ async def check_dlc_message():
     updated_counts = await asyncio.gather(*(process_reaction(message, reaction) for reaction in reactions))
     updated_questionnaire_info = [questionnaire_info[0]] + [
         [info[0], updated_counts[i], info[2]] for i, info in enumerate(questionnaire_info[1:])]
-    schedule.set_questionnaire_info(updated_questionnaire_info)
+    await run_schedule(
+        schedule.set_questionnaire_info,
+        updated_questionnaire_info,
+    )
 
 
 # The main bulk of the schedule loop
@@ -748,15 +837,19 @@ async def schedule_loop():
             pass
 
         try:
+            schedule_messages = await run_schedule(
+                schedule.get_schedule_messages)
             asyncio.create_task(update_scheduled_messages(
-                "schedule", schedule.get_schedule_messages()))
+                "schedule", schedule_messages))
         except Exception as e:
             print(e)
             pass
 
         try:
+            modlist_messages = await run_schedule(
+                schedule.get_modlist_messages)
             asyncio.create_task(update_scheduled_messages(
-                "modlist", schedule.get_modlist_messages()))
+                "modlist", modlist_messages))
         except Exception as e:
             print(e)
             pass
@@ -782,18 +875,20 @@ async def activity_loop():
             print("SERVER_PORT is not a valid integer.")
             return
         try:
-            with A2SQuery(server_ip, port_int, timeout=7) as a2s:
-                if BOT.server_status == "offline":
-                    BOT.server_start_time = int(datetime.datetime.now().replace(
-                        # type: ignore
-                        tzinfo=datetime.timezone.utc).timestamp() * 1000)
-                    BOT.server_status = "online"
-                num_players = a2s.info().players
-                mission = a2s.info().game
-                plural_str = "s" if num_players != 1 else ""
-                await BOT.change_presence(activity=discord.Activity(application_id=1035166922033082468, assets={"large_image": "pigs_patch", "large_text": "The Scarlet Pigs Server", "small_image": "pigs_patch", "small_text": "The Scarlet Pigs Server"}, type=discord.ActivityType.watching, name=f"{num_players} player" + plural_str + f" on {mission}", state="Running", timestamps={"start": BOT.server_start_time, "end": None}))
-                print("Updated server status to online - Start time set to " +
-                      str(BOT.server_start_time))
+            num_players, mission = await asyncio.to_thread(
+                query_server_status,
+                server_ip,
+                port_int,
+            )
+            if BOT.server_status == "offline":
+                BOT.server_start_time = int(datetime.datetime.now().replace(
+                    # type: ignore
+                    tzinfo=datetime.timezone.utc).timestamp() * 1000)
+                BOT.server_status = "online"
+            plural_str = "s" if num_players != 1 else ""
+            await BOT.change_presence(activity=discord.Activity(application_id=1035166922033082468, assets={"large_image": "pigs_patch", "large_text": "The Scarlet Pigs Server", "small_image": "pigs_patch", "small_text": "The Scarlet Pigs Server"}, type=discord.ActivityType.watching, name=f"{num_players} player" + plural_str + f" on {mission}", state="Running", timestamps={"start": BOT.server_start_time, "end": None}))
+            print("Updated server status to online - Start time set to " +
+                  str(BOT.server_start_time))
         except TimeoutError:
             await BOT.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"an offline server"))
             if BOT.server_status == "online":
@@ -819,8 +914,7 @@ async def loop_tasks():
     i = loop_tasks.current_loop
     if i == 0:
         print("Started loop tasks")
-    if (i % 2) == 0:
-        await activity_loop()
     if (i % 60) == 0:
         await schedule_loop()
+    if (i % 2) == 0:
         await activity_loop()

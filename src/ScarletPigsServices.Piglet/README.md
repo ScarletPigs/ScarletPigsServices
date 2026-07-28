@@ -2,29 +2,16 @@
 
 Piglet stores its schedule, Discord message registrations, and DLC
 questionnaire state in the Scarlet Pigs API. `scarletpigsapi.py` contains the
-typed Python client for the API's `snake_case` contract.
+typed Python client for the API's `snake_case` contract. The API is Piglet's
+sole persistent datastore.
 
-## One-time Google Sheets import
-
-Piglet never contacts Google Sheets. An operator can invoke the authenticated
-API endpoint `POST /api/admin/imports/google-sheets` to import:
-
-- schedule, modlist, and questionnaire message registrations;
-- questionnaire rows and reaction counts;
-- current and archived operations; and
-- the configured number of schedule dates.
-
-The API performs the database changes in a transaction and writes the
-`piglet.google_sheets_import` completion setting only after the import
-succeeds. Imported events use stable external IDs, and subsequent endpoint
-calls return `already_completed` without contacting Google.
+The DLC questionnaire options are read from the
+`piglet.dlc_questionnaire` app-setting. Configure that setting through the API
+before using `/createquestionnaire`; the bot reports a configuration message
+instead of creating an empty questionnaire when no options exist.
 
 
 The invite link for the bot: https://discord.com/api/oauth2/authorize?client_id=1012077296515039324&permissions=8&scope=bot%20applications.commands
-
-Legacy schedule sheet (import source): https://docs.google.com/spreadsheets/d/1BAWa3vwD20Q_92kWG_jZlMIkMXgQlF5piot4TYnmscE/edit?usp=sharing
-
-
 
 BOT INSTRUCTIONS MESSAGE:
 
@@ -38,5 +25,4 @@ The command to easily and quickly add roles written about in your announcement a
 
 The command to get reactions and signups in a nice and easily digestible way is like above but instead pressing "Get signups". Then it'll generate an excel sheet for you after some seconds. This will soon also include the training tags of the people that signed up next to their names.
 
-NOTE: For results from the DLC poll, consult the link below. It should dynamically update every hour with the new responses.
-https://docs.google.com/spreadsheets/d/e/2PACX-1vQYrmXaRK5P-FatQKhgiy6SEmyTX2sqSBvBxKg5Oz-hTYZMgeh8fFqgRD__mdSn5gC-3LqVC3u02WFJ/pubchart?oid=653336303&format=interactive
+The DLC questionnaire reaction counts are stored in the Scarlet Pigs API.

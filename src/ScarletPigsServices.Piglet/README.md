@@ -6,19 +6,18 @@ typed Python client for the API's `snake_case` contract.
 
 ## One-time Google Sheets import
 
-At startup Piglet reads the persistent
-`piglet.google_sheets_import` app-setting. If it is not marked complete, the bot
-uses the configured Google service-account credentials to import:
+Piglet never contacts Google Sheets. An operator can invoke the authenticated
+API endpoint `POST /api/admin/imports/google-sheets` to import:
 
 - schedule, modlist, and questionnaire message registrations;
 - questionnaire rows and reaction counts;
 - current and archived operations; and
 - the configured number of schedule dates.
 
-The completion setting is written only after all imports succeed. Imported
-events use stable external IDs, so an interrupted import can safely retry on
-the next launch. Once the marker is complete, Piglet does not initialize or
-contact Google Sheets during normal operation.
+The API performs the database changes in a transaction and writes the
+`piglet.google_sheets_import` completion setting only after the import
+succeeds. Imported events use stable external IDs, and subsequent endpoint
+calls return `already_completed` without contacting Google.
 
 
 The invite link for the bot: https://discord.com/api/oauth2/authorize?client_id=1012077296515039324&permissions=8&scope=bot%20applications.commands

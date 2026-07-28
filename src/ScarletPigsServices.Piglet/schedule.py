@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from copy import deepcopy
 import datetime
-import logging
 import os
 from typing import Any, cast
 from zoneinfo import ZoneInfo
@@ -17,8 +16,6 @@ SCHEDULE_MESSAGES_KEY = "piglet.discord.schedule_messages"
 MODLIST_MESSAGES_KEY = "piglet.discord.modlist_messages"
 QUESTIONNAIRE_MESSAGE_KEY = "piglet.discord.questionnaire_message"
 QUESTIONNAIRE_INFO_KEY = "piglet.dlc_questionnaire"
-GOOGLE_IMPORT_KEY = "piglet.google_sheets_import"
-GOOGLE_IMPORT_VERSION = 1
 
 EVENT_TYPE_KEY = os.getenv("PIGLET_EVENT_TYPE_KEY", "operation")
 EVENT_TIME_ZONE = ZoneInfo(os.getenv("PIGLET_TIMEZONE", "Europe/Copenhagen"))
@@ -26,93 +23,6 @@ EVENT_START_HOUR = 15
 EVENT_DURATION_MINUTES = 180
 
 _client: ScarletPigsApiClient | None = None
-_initialized = False
-
-
-def initialize(client: ScarletPigsApiClient | None = None) -> None:
-    """Prepare API storage and run the legacy import exactly once."""
-
-    global _client, _initialized
-    if client is not None:
-        _client = client
-    if _initialized:
-        return
-
-    api = _api()
-    api.ensure_event_type(EVENT_TYPE_KEY)
-    marker = api.get_setting(GOOGLE_IMPORT_KEY)
-    if marker is not None and _is_completed_import(marker.value):
-        _initialized = True
-        logging.info("Legacy Google Sheets import was already completed.")
-        return
-
-    # Google dependencies and credentials are deliberately touched only here.
-    from google_sheets_import import read_legacy_google_sheets
-
-    logging.info("Importing legacy Piglet data from Google Sheets.")
-    legacy = read_legacy_google_sheets()
-    api.set_setting(DATE_AMOUNT_KEY, legacy.date_amount)
-    api.set_setting(SCHEDULE_MESSAGES_KEY, legacy.schedule_messages)
-    api.set_setting(MODLIST_MESSAGES_KEY, legacy.modlist_messages)
-    api.set_setting(
-        QUESTIONNAIRE_MESSAGE_KEY,
-        legacy.questionnaire_message
-        if legacy.questionnaire_message is not None
-        else False,
-    )
-    api.set_setting(
-        QUESTIONNAIRE_INFO_KEY,
-        cast(JsonValue, legacy.questionnaire_info),
-    )
-
-    existing_events = api.get_events()
-    for operation in legacy.operations:
-        starts_at = _starts_at(operation.date)
-        external_id = _legacy_external_id(starts_at.date())
-        existing = next(
-            (
-                event
-                for event in existing_events
-                if event.external_id == external_id
-                or (
-                    event.type_key == EVENT_TYPE_KEY
-                    and _event_date(event) == starts_at.date()
-                )
-            ),
-            None,
-        )
-        if existing is not None:
-            continue
-        imported = api.create_event(
-            name=operation.name,
-            author=operation.author,
-            starts_at=starts_at,
-            type_key=EVENT_TYPE_KEY,
-            duration_minutes=EVENT_DURATION_MINUTES,
-            briefing=_briefing(operation.author),
-            external_id=external_id,
-            metadata={
-                "import_source": "google_sheets",
-                "legacy_sheet": operation.source,
-                "legacy_date": operation.date,
-            },
-        )
-        existing_events.append(imported)
-
-    # This marker is intentionally the final write. A failed partial import is
-    # safely retried, with stable external IDs preventing duplicate events.
-    api.set_setting(
-        GOOGLE_IMPORT_KEY,
-        {
-            "completed": True,
-            "completed_at": datetime.datetime.now(
-                datetime.timezone.utc
-            ).isoformat(),
-            "version": GOOGLE_IMPORT_VERSION,
-        },
-    )
-    _initialized = True
-    logging.info("Legacy Google Sheets import completed.")
 
 
 def _api() -> ScarletPigsApiClient:
@@ -120,12 +30,6 @@ def _api() -> ScarletPigsApiClient:
     if _client is None:
         _client = get_client()
     return _client
-
-
-def _is_completed_import(value: JsonValue) -> bool:
-    if value is True:
-        return True
-    return isinstance(value, dict) and value.get("completed") is True
 
 
 def _setting(key: str, default: JsonValue) -> JsonValue:
@@ -386,7 +290,3 @@ def _starts_at(value: str) -> datetime.datetime:
 
 def _briefing(author: str) -> str:
     return f"Op made by {author}" if author else ""
-
-
-def _legacy_external_id(value: datetime.date) -> str:
-    return f"piglet-google-sheets:{value.isoformat()}"

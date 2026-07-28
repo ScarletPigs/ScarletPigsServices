@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import replace
-import datetime
 from pathlib import Path
 import sys
-from types import ModuleType, SimpleNamespace
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 from uuid import uuid4
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -20,10 +18,6 @@ class FakeApiClient:
         self.settings: dict[str, object] = {}
         self.setting_writes: list[str] = []
         self.events: list[Event] = []
-        self.ensured_types: list[str] = []
-
-    def ensure_event_type(self, type_key: str) -> None:
-        self.ensured_types.append(type_key)
 
     def get_setting(self, key: str) -> AppSetting | None:
         if key not in self.settings:
@@ -76,63 +70,6 @@ class FakeApiClient:
 class ScheduleTests(unittest.TestCase):
     def setUp(self) -> None:
         schedule._client = None
-        schedule._initialized = False
-
-    def test_first_initialize_imports_everything_and_marks_completion_last(self) -> None:
-        api = FakeApiClient()
-        read = Mock(
-            return_value=SimpleNamespace(
-                date_amount=10,
-                schedule_messages={"servers": [{"guild_id": 1}]},
-                modlist_messages={"servers": [{"guild_id": 2}]},
-                questionnaire_message=None,
-                questionnaire_info=[["DLC", "Count", "Emoji"]],
-                operations=[
-                    SimpleNamespace(
-                        date="Aug 02 (26)",
-                        name="Current op",
-                        author="Alice",
-                        source="schedule",
-                    ),
-                    SimpleNamespace(
-                        date="Jul 26 (26)",
-                        name="Archived op",
-                        author="Bob",
-                        source="archive",
-                    ),
-                ],
-            )
-        )
-        importer = ModuleType("google_sheets_import")
-        importer.read_legacy_google_sheets = read  # type: ignore[attr-defined]
-
-        with patch.dict(sys.modules, {"google_sheets_import": importer}):
-            schedule.initialize(api)  # type: ignore[arg-type]
-            schedule.initialize(api)  # type: ignore[arg-type]
-
-        self.assertEqual(read.call_count, 1)
-        self.assertEqual(api.ensured_types, [schedule.EVENT_TYPE_KEY])
-        self.assertEqual(len(api.events), 2)
-        self.assertEqual(api.setting_writes[-1], schedule.GOOGLE_IMPORT_KEY)
-        marker = api.settings[schedule.GOOGLE_IMPORT_KEY]
-        self.assertIsInstance(marker, dict)
-        self.assertTrue(marker["completed"])  # type: ignore[index]
-
-    def test_existing_marker_skips_google(self) -> None:
-        api = FakeApiClient()
-        api.settings[schedule.GOOGLE_IMPORT_KEY] = {
-            "completed": True,
-            "version": 1,
-        }
-        importer = ModuleType("google_sheets_import")
-        importer.read_legacy_google_sheets = Mock(  # type: ignore[attr-defined]
-            side_effect=AssertionError("Google Sheets must not be opened")
-        )
-
-        with patch.dict(sys.modules, {"google_sheets_import": importer}):
-            schedule.initialize(api)  # type: ignore[arg-type]
-
-        self.assertTrue(schedule._initialized)
 
     def test_schedule_crud_uses_api_events(self) -> None:
         api = FakeApiClient()

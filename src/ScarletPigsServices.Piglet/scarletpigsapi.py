@@ -264,52 +264,6 @@ class ScarletPigsApiClient:
     def delete_event(self, event_id: UUID | str) -> None:
         self._request("DELETE", f"events/{event_id}")
 
-    def ensure_event_type(
-        self,
-        type_key: str,
-        *,
-        capability_key: str = "manage_events",
-    ) -> None:
-        event_type = self._request(
-            "GET",
-            f"event-types/{quote(type_key, safe='')}",
-            allow_not_found=True,
-        )
-        if event_type is not None:
-            return
-
-        capability = self._request(
-            "GET",
-            f"capabilities/{quote(capability_key, safe='')}",
-            allow_not_found=True,
-        )
-        if capability is None:
-            self._request(
-                "POST",
-                "capabilities",
-                json_body={
-                    "key": capability_key,
-                    "label": "Manage events",
-                    "description": "Create and maintain scheduled events.",
-                    "sort_order": 0,
-                },
-            )
-
-        self._request(
-            "POST",
-            "event-types",
-            json_body={
-                "key": type_key,
-                "capability_key": capability_key,
-                "label": "Operation",
-                "color": "",
-                "fixed_duration_minutes": 180,
-                "fixed_start_minutes": 900,
-                "force_unlimited_slots": True,
-                "sort_order": 0,
-            },
-        )
-
 
 def _as_aware(value: datetime) -> datetime:
     if value.tzinfo is None:

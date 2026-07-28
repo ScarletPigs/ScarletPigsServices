@@ -69,10 +69,10 @@ its two enums as native PostgreSQL enum types. Existing databases must be
 recreated before deploying this migration history. See the
 [API documentation](src/ScarletPigsServices.Api/README.md) for route conventions.
 
-Piglet uses a typed Python client for this contract. On its first launch it
-imports the legacy Google Sheets data, then persists a completion marker in
-`/api/app-settings`; subsequent launches use only the API for schedule and bot
-state.
+Piglet uses a typed Python client for this contract and only uses the API for
+schedule and bot state. The legacy Google Sheets data can be imported manually
+through `POST /api/admin/imports/google-sheets`; the API persists a completion
+marker in `/api/app-settings` to prevent accidental reruns.
 
 During local AppHost execution, Aspire runs `dotnet ef database update` and holds
 the API until migrations complete. During publishing, Aspire builds a Linux

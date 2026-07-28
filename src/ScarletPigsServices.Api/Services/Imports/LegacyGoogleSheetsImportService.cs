@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
 using ScarletPigsServices.Data;
 using ScarletPigsServices.Data.Models;
 
@@ -34,62 +33,67 @@ public sealed class LegacyGoogleSheetsImportService(
     public async Task<LegacyGoogleSheetsImportResult> ImportAsync(
         CancellationToken cancellationToken)
     {
-        var marker = await db.AppSettings
-            .AsNoTracking()
-            .SingleOrDefaultAsync(
-                setting => setting.Key == ImportMarkerKey,
-                cancellationToken);
-        if (marker is not null && IsCompleted(marker.Value.RootElement))
+        if (await ImportIsCompletedAsync(cancellationToken))
         {
-            return new LegacyGoogleSheetsImportResult(
-                "already_completed", 0, 0, 0);
+            return AlreadyCompletedResult();
         }
 
         var legacy = await reader.ReadAsync(cancellationToken);
-        IDbContextTransaction? transaction = null;
-        if (db.Database.IsRelational())
+        if (!db.Database.IsRelational())
         {
-            transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+            return await ImportDatabaseStateAsync(legacy, cancellationToken);
         }
 
-        try
-        {
-            var now = DateTimeOffset.UtcNow;
-            await EnsureEventTypeAsync(now, cancellationToken);
-            var settingsImported = await ImportSettingsAsync(
-                legacy, now, cancellationToken);
-            var (eventsImported, eventsSkipped) = await ImportEventsAsync(
-                legacy.Operations, now, cancellationToken);
-
-            SetSetting(
-                await FindSettingAsync(ImportMarkerKey, cancellationToken),
-                ImportMarkerKey,
-                new
+        var strategy = db.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteInTransactionAsync(
+            async retryCancellationToken =>
+            {
+                db.ChangeTracker.Clear();
+                if (await ImportIsCompletedAsync(retryCancellationToken))
                 {
-                    completed = true,
-                    completed_at = now,
-                    version = 1
-                },
-                now);
-            await db.SaveChangesAsync(cancellationToken);
-            if (transaction is not null)
-            {
-                await transaction.CommitAsync(cancellationToken);
-            }
+                    return AlreadyCompletedResult();
+                }
 
-            return new LegacyGoogleSheetsImportResult(
-                "completed",
-                eventsImported,
-                eventsSkipped,
-                settingsImported);
-        }
-        finally
-        {
-            if (transaction is not null)
+                return await ImportDatabaseStateAsync(
+                    legacy,
+                    retryCancellationToken);
+            },
+            async verifyCancellationToken =>
             {
-                await transaction.DisposeAsync();
-            }
-        }
+                db.ChangeTracker.Clear();
+                return await ImportIsCompletedAsync(verifyCancellationToken);
+            },
+            cancellationToken);
+    }
+
+    private async Task<LegacyGoogleSheetsImportResult> ImportDatabaseStateAsync(
+        LegacyGoogleSheetsData legacy,
+        CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        await EnsureEventTypeAsync(now, cancellationToken);
+        var settingsImported = await ImportSettingsAsync(
+            legacy, now, cancellationToken);
+        var (eventsImported, eventsSkipped) = await ImportEventsAsync(
+            legacy.Operations, now, cancellationToken);
+
+        SetSetting(
+            await FindSettingAsync(ImportMarkerKey, cancellationToken),
+            ImportMarkerKey,
+            new
+            {
+                completed = true,
+                completed_at = now,
+                version = 1
+            },
+            now);
+        await db.SaveChangesAsync(cancellationToken);
+
+        return new LegacyGoogleSheetsImportResult(
+            "completed",
+            eventsImported,
+            eventsSkipped,
+            settingsImported);
     }
 
     private async Task EnsureEventTypeAsync(
@@ -213,6 +217,19 @@ public sealed class LegacyGoogleSheetsImportService(
             && marker.TryGetProperty("completed", out var completed)
             && completed.ValueKind == JsonValueKind.True);
 
+    private async Task<bool> ImportIsCompletedAsync(
+        CancellationToken cancellationToken)
+    {
+        var marker = await db.AppSettings
+            .AsNoTracking()
+            .SingleOrDefaultAsync(
+                setting => setting.Key == ImportMarkerKey,
+                cancellationToken);
+        return marker is not null && IsCompleted(marker.Value.RootElement);
+    }
+
+    private static LegacyGoogleSheetsImportResult AlreadyCompletedResult() =>
+        new("already_completed", 0, 0, 0);
 }
 
 public sealed record LegacyGoogleSheetsEventPlan(

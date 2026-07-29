@@ -14,13 +14,16 @@ public sealed class ScarletPigsDbContext(DbContextOptions<ScarletPigsDbContext> 
     public DbSet<EventType> EventTypes => Set<EventType>();
     public DbSet<Event> Events => Set<Event>();
     public DbSet<HighlightVideo> HighlightVideos => Set<HighlightVideo>();
+    public DbSet<MissionAttendance> MissionAttendance => Set<MissionAttendance>();
     public DbSet<MissionUpload> MissionUploads => Set<MissionUpload>();
     public DbSet<ModListMod> ModListMods => Set<ModListMod>();
     public DbSet<ModList> ModLists => Set<ModList>();
     public DbSet<Mod> Mods => Set<Mod>();
+    public DbSet<ProfileNameHistory> ProfileNameHistory => Set<ProfileNameHistory>();
     public DbSet<Profile> Profiles => Set<Profile>();
     public DbSet<RoleCapability> RoleCapabilities => Set<RoleCapability>();
     public DbSet<RoleOverride> RoleOverrides => Set<RoleOverride>();
+    public DbSet<SteamDlcOwnership> SteamDlcOwnership => Set<SteamDlcOwnership>();
     public DbSet<UserCapabilityOverride> UserCapabilityOverrides => Set<UserCapabilityOverride>();
     public DbSet<UserDiscordRole> UserDiscordRoles => Set<UserDiscordRole>();
 
@@ -141,6 +144,21 @@ public sealed class ScarletPigsDbContext(DbContextOptions<ScarletPigsDbContext> 
             entity.Property(item => item.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
         });
 
+        builder.Entity<MissionAttendance>(entity =>
+        {
+            entity.ToTable("mission_attendance");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Id).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(item => item.MissionName).IsRequired();
+            entity.Property(item => item.RecordedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(item => item.SessionDate).IsRequired();
+            entity.Property(item => item.SteamId).IsRequired();
+            // Repeated posts during one session must collapse to a single row.
+            entity.HasIndex(item => new { item.SteamId, item.MissionName, item.SessionDate }).IsUnique();
+            entity.HasIndex(item => item.MissionName);
+            entity.HasIndex(item => item.RecordedAt);
+        });
+
         builder.Entity<MissionUpload>(entity =>
         {
             entity.ToTable("mission_uploads");
@@ -220,6 +238,17 @@ public sealed class ScarletPigsDbContext(DbContextOptions<ScarletPigsDbContext> 
             entity.HasIndex(item => item.DiscordId).IsUnique();
         });
 
+        builder.Entity<ProfileNameHistory>(entity =>
+        {
+            entity.ToTable("profile_name_history");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Id).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(item => item.ProfileName).IsRequired();
+            entity.Property(item => item.RecordedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(item => item.SteamId).IsRequired();
+            entity.HasIndex(item => new { item.SteamId, item.RecordedAt });
+        });
+
         builder.Entity<RoleCapability>(entity =>
         {
             entity.ToTable("role_capabilities");
@@ -242,6 +271,14 @@ public sealed class ScarletPigsDbContext(DbContextOptions<ScarletPigsDbContext> 
                 .WithMany()
                 .HasForeignKey(item => item.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<SteamDlcOwnership>(entity =>
+        {
+            entity.ToTable("steam_dlc_ownership");
+            entity.HasKey(item => new { item.SteamId, item.DlcId });
+            entity.Property(item => item.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.HasIndex(item => item.DlcId);
         });
 
         builder.Entity<UserCapabilityOverride>(entity =>

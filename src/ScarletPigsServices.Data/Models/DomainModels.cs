@@ -116,6 +116,20 @@ public sealed class HighlightVideo
     public required string VideoId { get; set; }
 }
 
+public sealed class MissionAttendance
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public required string MissionName { get; set; }
+    public DateTimeOffset RecordedAt { get; set; } = DateTimeOffset.UtcNow;
+
+    /// <summary>
+    /// The Europe/Stockholm local date of the session window this attendance was recorded in.
+    /// Always a Sunday; exists so repeated posts during one session collapse to a single row.
+    /// </summary>
+    public required DateOnly SessionDate { get; set; }
+    public required long SteamId { get; set; }
+}
+
 public sealed class MissionUpload
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -182,6 +196,14 @@ public sealed class Profile
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
 
+public sealed class ProfileNameHistory
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public required string ProfileName { get; set; }
+    public DateTimeOffset RecordedAt { get; set; } = DateTimeOffset.UtcNow;
+    public required long SteamId { get; set; }
+}
+
 public sealed class RoleCapability
 {
     public required string CapabilityKey { get; set; }
@@ -197,6 +219,13 @@ public sealed class RoleOverride
     public string? Note { get; set; }
     public required string RoleId { get; set; }
     public required Guid UserId { get; set; }
+}
+
+public sealed class SteamDlcOwnership
+{
+    public required long SteamId { get; set; }
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public required long DlcId { get; set; }
 }
 
 public sealed class UserCapabilityOverride

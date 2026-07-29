@@ -133,6 +133,14 @@ jobs:
           dotnet restore
           Aspire/ScarletPigsServices.AppHost/ScarletPigsServices.AppHost.csproj
 
+      - name: Validate migration bundle
+        run: >
+          aspire do migrationservice-generate-migration-bundle
+          --apphost Aspire/ScarletPigsServices.AppHost/ScarletPigsServices.AppHost.csproj
+          --environment Production
+          --non-interactive
+          --nologo
+
       - name: Deploy to Dokploy
         run: >
           aspire deploy

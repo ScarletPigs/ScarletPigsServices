@@ -57,15 +57,25 @@ scheme and enter the configured key to call endpoints from the UI.
 
 ## OCAP read-through API
 
-Authenticated clients can read OCAP resources through
-`GET /api/ocap/{ocap-path}`. The API streams OCAP's status, headers, and body
-without buffering large recording files. Supported upstream paths are:
+Authenticated clients can read OCAP resources through explicit Scarlet Pigs API
+actions. Each action is included in the generated OpenAPI document. The API
+streams OCAP's status, headers, and body without buffering large recording
+files. The exposed routes are:
 
-- `/api/healthcheck`, `/api/version`, and `/api/v1/customize`;
-- `/api/v1/operations` and its read-only child routes;
-- `/api/v1/worlds`;
-- `/data/*` recording manifests, chunks, and legacy JSON recordings;
-- `/images/*` maps, markers, fonts, and sprites.
+- `/api/ocap/api/healthcheck`
+- `/api/ocap/api/version`
+- `/api/ocap/api/v1/operations`
+- `/api/ocap/api/v1/operations/{id}`
+- `/api/ocap/api/v1/operations/{id}/marker-blacklist`
+- `/api/ocap/api/v1/worlds`
+- `/api/ocap/api/v1/customize`
+- `/api/ocap/data/{path}` for recording manifests, chunks, and legacy JSON
+  recordings
+- `/api/ocap/images/markers/{name}/{color}`
+- `/api/ocap/images/markers/magicons/{name}`
+- `/api/ocap/images/maps/fonts/{fontstack}/{range}`
+- `/api/ocap/images/maps/sprites/{name}`
+- `/api/ocap/images/maps/{path}` for map tiles and metadata
 
 For example, `GET /api/ocap/api/v1/operations` returns OCAP's recording
 catalogue. Authentication, upload, administration, and live-stream endpoints

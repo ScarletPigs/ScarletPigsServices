@@ -70,24 +70,38 @@ public sealed class AddonController(ScarletPigsDbContext db) : ControllerBase
         }
         catch (DbUpdateException exception) when (IsUniqueViolation(exception))
         {
-            // A concurrent post inserted the same row first. The save is transactional, so the
-            // rest of the batch rolled back with it - drop only the duplicates and save again.
-            foreach (var entry in exception.Entries)
-            {
-                switch (entry.Entity)
-                {
-                    case ProfileNameHistory:
-                        profileNameRecorded = false;
-                        break;
-                    case MissionAttendance:
-                        attendanceRecorded = false;
-                        break;
-                }
+            // A concurrent post inserted one or more rows first. Retry once by reloading/recomputing
+            // the intended state so we don't drop unrelated changes (e.g., DLC reconciliation).
+            db.ChangeTracker.Clear();
 
-                entry.State = EntityState.Detached;
+            await ReplaceDlcOwnershipAsync(steamId, ownedDlc, receivedAt, cancellationToken);
+
+            profileNameRecorded = false;
+            attendanceRecorded = false;
+            if (withinSessionWindow)
+            {
+                profileNameRecorded = await TryAddProfileNameAsync(steamId, profileName, receivedAt, cancellationToken);
+                attendanceRecorded = await TryAddAttendanceAsync(steamId, missionName, sessionDate, receivedAt, cancellationToken);
             }
 
-            await db.SaveChangesAsync(cancellationToken);
+            try
+            {
+                await db.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateException retryException) when (IsUniqueViolation(retryException))
+            {
+                // If we still raced on attendance, drop only the conflicting insert and persist the rest.
+                foreach (var entry in retryException.Entries)
+                {
+                    if (entry.State == EntityState.Added && entry.Entity is MissionAttendance)
+                    {
+                        attendanceRecorded = false;
+                        entry.State = EntityState.Detached;
+                    }
+                }
+
+                await db.SaveChangesAsync(cancellationToken);
+            }
         }
 
         return Ok(new UserInfoResponse(

@@ -99,6 +99,11 @@ The GitHub Actions
 validates the required values, and runs the Aspire deployment pipeline with the
 `Production` environment.
 
+Pull requests to `main` run [`ci.yml`](.github/workflows/ci.yml), which executes
+the test suite and the Aspire migration-bundle generation step. The deployment
+workflow repeats that bundle preflight before the full pipeline so a bundle
+generation failure is reported before container images are pushed.
+
 Any parameter added to the Aspire AppHost must also be added to the repository's
 `production` GitHub environment as a secret or variable, then mapped and
 validated in [`deploy.yml`](.github/workflows/deploy.yml). A parameter change is

@@ -116,6 +116,15 @@ ocapService
         .WithDomain("http", "aar.scarletpigs.com")
         .WithDomain("https", "aar.scarletpigs.com"));
 
+apiService
+    .WithEnvironment($"services__{ServiceRefs.OCAP}__http__0", ocapService.GetEndpoint("http"))
+    .WaitFor(ocapService);
+
+if (builder.ExecutionContext.IsRunMode)
+{
+    apiService.WithEnvironment("Ocap__PublicBaseUrl", ocapService.GetEndpoint("http"));
+}
+
 // Web Frontend Service
 /*
 builder.AddProject<Projects.ScarletPigsServices_Website>(ServiceRefs.WEBSITE)

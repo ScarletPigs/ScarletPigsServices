@@ -55,6 +55,52 @@ The composite-key collections use both key values in their item routes:
 Swagger is available at `/swagger` in Development. Select the `ApiKey` security
 scheme and enter the configured key to call endpoints from the UI.
 
+## OCAP read-through API
+
+Authenticated clients can read OCAP resources through explicit Scarlet Pigs API
+actions. Each action is included in the generated OpenAPI document. The API
+streams OCAP's status, headers, and body without buffering large recording
+files. The exposed routes are:
+
+- `/api/ocap/api/healthcheck`
+- `/api/ocap/api/version`
+- `/api/ocap/api/v1/operations`
+- `/api/ocap/api/v1/operations/{id}`
+- `/api/ocap/api/v1/operations/{id}/marker-blacklist`
+- `/api/ocap/api/v1/worlds`
+- `/api/ocap/api/v1/customize`
+- `/api/ocap/data/{path}` for recording manifests, chunks, and legacy JSON
+  recordings
+- `/api/ocap/images/markers/{name}/{color}`
+- `/api/ocap/images/markers/magicons/{name}`
+- `/api/ocap/images/maps/fonts/{fontstack}/{range}`
+- `/api/ocap/images/maps/sprites/{name}`
+- `/api/ocap/images/maps/{path}` for map tiles and metadata
+
+For example, `GET /api/ocap/api/v1/operations` returns OCAP's recording
+catalogue. Authentication, upload, administration, and live-stream endpoints
+are deliberately not proxied.
+
+The AppHost supplies OCAP service discovery to the API. Outside the AppHost,
+configure the `http://ocap` service-discovery endpoint and set
+`Ocap:PublicBaseUrl` to the browser-facing OCAP base URL.
+
+## Automatic event AAR linking
+
+The API checks events whose `type_key` is `operation` when their `starts_at`
+time arrives. It retries once per hour for five hours. Each completed protobuf
+recording's manifest supplies its actual UTC start time; the catalogue's
+mission duration supplies its end time. The recording with the greatest
+overlap with the event timeslot is linked at:
+
+```text
+{Ocap:PublicBaseUrl}/recording/{recording-id}/{filename}
+```
+
+The resulting URL is stored in the event's `aar_url`. Attempts stop immediately
+after a match. The last-attempt timestamp is persisted but excluded from the
+JSON contract, allowing retries to retain their cadence across API restarts.
+
 ## Addon
 
 `POST /addon/user-info` is the single call-home endpoint for the in-game addon.

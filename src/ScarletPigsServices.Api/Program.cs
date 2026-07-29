@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
 using ScarletPigsServices.Api.Authentication;
 using ScarletPigsServices.Api.Services.Files;
+using ScarletPigsServices.Api.Services.Ocap;
 using ScarletPigsServices.Api.Services.Workshop;
 using ScarletPigsServices.Data;
 using ScarletPigsServices.Data.Models;
@@ -42,6 +43,25 @@ namespace ScarletPigsServices.Api
                 .ValidateOnStart();
 
             builder.Services
+                .AddOptions<OcapOptions>()
+                .Bind(builder.Configuration.GetSection(OcapOptions.SectionName))
+                .Validate(
+                    options => Uri.TryCreate(options.PublicBaseUrl, UriKind.Absolute, out _),
+                    "Ocap:PublicBaseUrl must be an absolute URL.")
+                .ValidateOnStart();
+
+            builder.Services
+                .AddOptions<OcapEventLinkingOptions>()
+                .Bind(builder.Configuration.GetSection(OcapEventLinkingOptions.SectionName))
+                .Validate(options => options.LookupWindow > TimeSpan.Zero, "LookupWindow must be positive.")
+                .Validate(options => options.RetryInterval > TimeSpan.Zero, "RetryInterval must be positive.")
+                .Validate(options => options.SweepInterval > TimeSpan.Zero, "SweepInterval must be positive.")
+                .Validate(
+                    options => options.LookupWindow >= options.RetryInterval,
+                    "LookupWindow must be at least as long as RetryInterval.")
+                .ValidateOnStart();
+
+            builder.Services
                 .AddAuthentication(ApiKeyAuthenticationDefaults.AuthenticationScheme)
                 .AddScheme<ApiKeyAuthenticationOptions, ApiKeyAuthenticationHandler>(
                     ApiKeyAuthenticationDefaults.AuthenticationScheme,
@@ -64,6 +84,14 @@ namespace ScarletPigsServices.Api
                     .MapEnum<ModSide>("mod_side")
                     .MapEnum<OverrideMode>("override_mode")));
             builder.Services.AddSingleton<IHavocFileService, HavocFileService>();
+            builder.Services.AddSingleton(TimeProvider.System);
+            builder.Services.AddHttpClient<IOcapClient, OcapClient>(client =>
+            {
+                client.BaseAddress = new Uri($"http://{ServiceRefs.OCAP}/");
+            });
+            builder.Services.AddScoped<IOcapEventStore, OcapEventStore>();
+            builder.Services.AddScoped<OcapEventLinker>();
+            builder.Services.AddHostedService<OcapEventLinkingWorker>();
             builder.Services.AddHttpClient<ISteamWorkshopService, SteamWorkshopService>(client =>
             {
                 client.BaseAddress = new Uri("https://api.steampowered.com/");

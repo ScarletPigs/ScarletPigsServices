@@ -3,6 +3,7 @@ using System;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using ScarletPigsServices.Data;
@@ -13,9 +14,11 @@ using ScarletPigsServices.Data.Models;
 namespace ScarletPigsServices.Data.Migrations
 {
     [DbContext(typeof(ScarletPigsDbContext))]
-    partial class ScarletPigsDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260728183002_AddEventAarLookupAttempt")]
+    partial class AddEventAarLookupAttempt
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -439,45 +442,6 @@ namespace ScarletPigsServices.Data.Migrations
                     b.ToTable("highlight_videos", (string)null);
                 });
 
-            modelBuilder.Entity("ScarletPigsServices.Data.Models.MissionAttendance", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id")
-                        .HasDefaultValueSql("gen_random_uuid()");
-
-                    b.Property<string>("MissionName")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("mission_name");
-
-                    b.Property<DateTimeOffset>("RecordedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("recorded_at")
-                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-                    b.Property<DateOnly>("SessionDate")
-                        .HasColumnType("date")
-                        .HasColumnName("session_date");
-
-                    b.Property<long>("SteamId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("steam_id");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("MissionName");
-
-                    b.HasIndex("RecordedAt");
-
-                    b.HasIndex("SteamId", "MissionName", "SessionDate")
-                        .IsUnique();
-
-                    b.ToTable("mission_attendance", (string)null);
-                });
-
             modelBuilder.Entity("ScarletPigsServices.Data.Models.MissionUpload", b =>
                 {
                     b.Property<Guid>("Id")
@@ -763,36 +727,6 @@ namespace ScarletPigsServices.Data.Migrations
                     b.ToTable("profiles", (string)null);
                 });
 
-            modelBuilder.Entity("ScarletPigsServices.Data.Models.ProfileNameHistory", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id")
-                        .HasDefaultValueSql("gen_random_uuid()");
-
-                    b.Property<string>("ProfileName")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("profile_name");
-
-                    b.Property<DateTimeOffset>("RecordedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("recorded_at")
-                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-                    b.Property<long>("SteamId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("steam_id");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("SteamId", "RecordedAt");
-
-                    b.ToTable("profile_name_history", (string)null);
-                });
-
             modelBuilder.Entity("ScarletPigsServices.Data.Models.RoleCapability", b =>
                 {
                     b.Property<string>("RoleId")
@@ -850,29 +784,6 @@ namespace ScarletPigsServices.Data.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("role_overrides", (string)null);
-                });
-
-            modelBuilder.Entity("ScarletPigsServices.Data.Models.SteamDlcOwnership", b =>
-                {
-                    b.Property<long>("SteamId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("steam_id");
-
-                    b.Property<long>("DlcId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("dlc_id");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at")
-                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-                    b.HasKey("SteamId", "DlcId");
-
-                    b.HasIndex("DlcId");
-
-                    b.ToTable("steam_dlc_ownership", (string)null);
                 });
 
             modelBuilder.Entity("ScarletPigsServices.Data.Models.UserCapabilityOverride", b =>
